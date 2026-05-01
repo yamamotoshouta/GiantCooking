@@ -1,0 +1,19 @@
+{
+    "name": "AntiGravity.Editor",
+    "rootNamespace": "AntiGravity.Editor",
+    "references": [
+        "AntiGravity",
+        "Unity.XR.Interaction.Toolkit"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -73,7 +73,7 @@ namespace AntiGravity
             if (interactable != null && interactable.isSelected)
             {
                 var interactor = interactable.firstInteractorSelecting;
-                if (interactor is XRBaseControllerInteractor controllerInteractor)
+                if (interactor is UnityEngine.XR.Interaction.Toolkit.Interactors.XRBaseInputInteractor controllerInteractor)
                 {
                     controllerInteractor.xrController.SendHapticImpulse(hapticIntensity, hapticDuration);
                 }
