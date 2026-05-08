@@ -33,6 +33,7 @@ namespace AntiGravity
 
             if (gameObject.CompareTag("Player") && ScreenFader.Instance != null)
             {
+                if (GameManager.Instance != null) GameManager.Instance.TriggerDefeat();
                 yield return ScreenFader.Instance.FadeOut(0.5f);
             }
             else if (gameObject.CompareTag("Enemy") && GameManager.Instance != null)

@@ -11,7 +11,7 @@ namespace AntiGravity
         [SerializeField] private float maxGauge = 1.0f;
         [SerializeField] private float gaugeDecayRate = 0.02f;
         
-        public enum GameState { StartMenu, Playing, Victory }
+        public enum GameState { StartMenu, Playing, Victory, Defeat }
         private GameState currentState = GameState.StartMenu;
         public GameState CurrentState => currentState;
 
@@ -33,6 +33,7 @@ namespace AntiGravity
         public UnityEvent OnIssenActivated;
         public UnityEvent OnGameStarted;
         public UnityEvent OnVictory;
+        public UnityEvent OnDefeat;
 
         private void Awake()
         {
@@ -67,6 +68,16 @@ namespace AntiGravity
                 currentState = GameState.Victory;
                 OnVictory?.Invoke();
                 Debug.Log("Victory!");
+            }
+        }
+
+        public void TriggerDefeat()
+        {
+            if (currentState == GameState.Playing)
+            {
+                currentState = GameState.Defeat;
+                OnDefeat?.Invoke();
+                Debug.Log("Defeat...");
             }
         }
 
@@ -121,6 +132,11 @@ namespace AntiGravity
                 if (audioSource != null && issenActivateClip != null)
                 {
                     audioSource.PlayOneShot(issenActivateClip);
+                }
+
+                if (AntiGravity.System.TimeManager.Instance != null)
+                {
+                    AntiGravity.System.TimeManager.Instance.DoSlowMotion(1.5f, 0.3f);
                 }
 
                 Debug.Log("Issen Activated! Next hit will blast the enemy.");

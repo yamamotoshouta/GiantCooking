@@ -20,6 +20,8 @@ namespace AntiGravity
         [SerializeField] private GameObject sparkPrefab;
         [SerializeField] private Renderer swordRenderer;
         [SerializeField] private Color issenColor = Color.yellow;
+        [SerializeField] private TrailRenderer swordTrail;
+        [SerializeField] private ParticleSystem auraParticles;
         
         private UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable interactable;
         private Rigidbody rb;
@@ -36,6 +38,9 @@ namespace AntiGravity
                 swordMaterial = swordRenderer.material;
                 originalColor = swordMaterial.GetColor("_EmissionColor");
             }
+
+            if (swordTrail != null) swordTrail.enabled = false;
+            if (auraParticles != null) auraParticles.Stop();
         }
 
         private void OnEnable()
@@ -99,7 +104,23 @@ namespace AntiGravity
             // Trigger Haptics
             TriggerHaptics(intensity);
 
-            // Add to Gauge
+            // Hit Stop for crunchiness
+            if (AntiGravity.System.TimeManager.Instance != null)
+            {
+                AntiGravity.System.TimeManager.Instance.DoHitStop(0.05f);
+            }
+
+            // Add to Gauge (only if not hitting an invincible enemy)
+            bool isEnemySword = false;
+            EnemyAI enemy = collision.gameObject.GetComponentInParent<EnemyAI>();
+            if (enemy != null)
+            {
+                isEnemySword = true;
+                if (enemy.IsInvincible) return; // Ignore if already recoiling
+                
+                enemy.TriggerRecoil();
+            }
+
             if (GameManager.Instance != null)
             {
                 GameManager.Instance.AddGauge(0.05f);
@@ -121,6 +142,9 @@ namespace AntiGravity
 
         private void HandleEnemyHit(Collision collision)
         {
+            EnemyAI enemy = collision.gameObject.GetComponent<EnemyAI>();
+            if (enemy != null && enemy.IsInvincible) return;
+
             if (GameManager.Instance != null && GameManager.Instance.IsIssenActive)
             {
                 // Issen blowback
@@ -150,13 +174,22 @@ namespace AntiGravity
                 swordMaterial.SetColor("_EmissionColor", issenColor);
                 swordMaterial.EnableKeyword("_EMISSION");
             }
+
+            if (swordTrail != null) swordTrail.enabled = true;
+            if (auraParticles != null) auraParticles.Play();
         }
 
         private void HandleGaugeResetVisuals(float ratio)
         {
-            if (ratio <= 0 && swordMaterial != null)
+            if (ratio <= 0)
             {
-                swordMaterial.SetColor("_EmissionColor", originalColor);
+                if (swordMaterial != null)
+                {
+                    swordMaterial.SetColor("_EmissionColor", originalColor);
+                }
+
+                if (swordTrail != null) swordTrail.enabled = false;
+                if (auraParticles != null) auraParticles.Stop();
             }
         }
 

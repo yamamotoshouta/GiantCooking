@@ -13,10 +13,13 @@ namespace AntiGravity.Editor
         private const string PLAYER_PREFAB_PATH = "Assets/VRTemplateAssets/Prefabs/Setup/Complete XR Origin Set Up Variant.prefab";
         private const string VIGNETTE_PREFAB_PATH = "Assets/Samples/XR Interaction Toolkit/3.2.1/Starter Assets/TunnelingVignette/Tunneling Vignette.prefab";
         private const string KNIGHT_MODEL_PATH = "Assets/Toon_RTS_demo/models/ToonRTS_demo_Knight.FBX";
-        private const string CLASH_SFX_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-21.wav";
-        private const string ISSEN_SFX_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-28.wav";
-        private const string GAUGE_MAX_SFX_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-45.wav";
+        private const string CLASH_SFX_PATH = "Assets/Free Pack/Metal impact 5.wav";
+        private const string ISSEN_SFX_PATH = "Assets/Free Pack/Magic Spell_Electricity Spell_1.wav";
+        private const string GAUGE_MAX_SFX_PATH = "Assets/Free Pack/Magic Spell_Simple Swoosh_6.wav";
+        private const string AMBIENT_SFX_PATH = "Assets/Free Pack/Thunder strikes 30 second- Loop.wav";
+        private const string FOOTSTEP_SFX_PATH = "Assets/Free Pack/Walking in ChainMail - Loop.wav";
         private const string SPARK_VFX_PATH = "Assets/UnityTechnologies/ParticlePack/EffectExamples/Weapon Effects/Prefabs/MetalImpacts.prefab";
+        private const string AURA_VFX_PATH = "Assets/UnityTechnologies/ParticlePack/EffectExamples/Misc Effects/Prefabs/ElectricalSparks.prefab";
         private const string SKYBOX_MAT_PATH = "Assets/VRTemplateAssets/Materials/Skybox/Hub Skybox Blue 2.mat"; // Stable VR skybox
         private const string ISLAND_PREFAB_PATH = "Assets/Low_Poly_Nature_Pack_Lite/Prefabs/Stones/Stone_5_moss.prefab";
         private const string SMALL_ROCK_PREFAB_PATH = "Assets/Low_Poly_Nature_Pack_Lite/Prefabs/Stones/Stone_5_moss.prefab";
@@ -34,6 +37,8 @@ namespace AntiGravity.Editor
         [MenuItem("AntiGravity/Create VR Game Scene")]
         public static void CreateVRGame()
         {
+            CreateTags();
+
             // 0. Reset Environment and Setup Proper Sky
             Material skyboxMat = AssetDatabase.LoadAssetAtPath<Material>(SKYBOX_MAT_PATH);
             if (skyboxMat != null)
@@ -42,14 +47,13 @@ namespace AntiGravity.Editor
             }
             else
             {
-                RenderSettings.skybox = null; // Revert to Unity default if not found
+                RenderSettings.skybox = null; 
             }
 
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Skybox;
             RenderSettings.ambientIntensity = 1.0f;
             RenderSettings.fog = false;
             
-            // Ensure Directional Light is clean and white
             Light dirLight = GameObject.FindObjectOfType<Light>();
             if (dirLight != null && dirLight.type == LightType.Directional)
             {
@@ -57,7 +61,6 @@ namespace AntiGravity.Editor
                 dirLight.intensity = 1.0f;
             }
 
-            // Disable any scripts that might force yellow colors (FastSky remnants)
             var allComponents = GameObject.FindObjectsOfType<MonoBehaviour>();
             foreach (var comp in allComponents)
             {
@@ -75,17 +78,26 @@ namespace AntiGravity.Editor
             {
                 gm = new GameObject("AntiGravity_GameManager");
                 var manager = gm.AddComponent<GameManager>();
+                gm.AddComponent<AntiGravity.System.TimeManager>(); // Add TimeManager
                 
-                // Assign Audio
                 var source = gm.AddComponent<AudioSource>();
                 source.playOnAwake = false;
-                source.spatialBlend = 0f; // 2D for UI-like sounds
+                source.spatialBlend = 0f; 
                 
                 var propSource = typeof(GameManager).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
                 var propClip = typeof(GameManager).GetField("gaugeMaxClip", BindingFlags.NonPublic | BindingFlags.Instance);
                 
                 if (propSource != null) propSource.SetValue(manager, source);
                 if (propClip != null) propClip.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(GAUGE_MAX_SFX_PATH));
+
+                // Ambient Sound
+                var ambientSource = gm.AddComponent<AudioSource>();
+                ambientSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(AMBIENT_SFX_PATH);
+                ambientSource.loop = true;
+                ambientSource.playOnAwake = true;
+                ambientSource.volume = 0.3f;
+                ambientSource.spatialBlend = 0f;
+                ambientSource.Play();
                 
                 Debug.Log("Created GameManager and assigned Audio.");
             }
@@ -103,7 +115,7 @@ namespace AntiGravity.Editor
                 }
                 else
                 {
-                    Debug.LogWarning("Player Prefab not found. Make sure VR Template Assets are installed.");
+                    Debug.LogWarning("Player Prefab not found.");
                 }
             }
 
@@ -119,7 +131,6 @@ namespace AntiGravity.Editor
                         vignette = (GameObject)PrefabUtility.InstantiatePrefab(vignettePrefab);
                         vignette.transform.SetParent(xrOrigin.transform.Find("Camera Offset/Main Camera"), false);
                         
-                        // Setup VignetteController
                         var controller = gm.GetComponent<VignetteController>();
                         if (controller == null) controller = gm.AddComponent<VignetteController>();
                         
@@ -127,31 +138,27 @@ namespace AntiGravity.Editor
                     }
                 }
 
-                // Setup Wrist UI
                 SetupWristUI(xrOrigin);
             }
 
-            // 4. Setup Stage (The Floating Ruins Map)
+            // 4. Setup Stage
             GameObject oldStage = GameObject.Find("BattleStage");
             if (oldStage != null) Undo.DestroyObjectImmediate(oldStage);
 
             GameObject stage = new GameObject("BattleStage");
             stage.transform.position = Vector3.zero;
             
-            // 1. Create a "Proper Map" Floor (9 stones arranged in a flat-ish area)
             GameObject islandPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ISLAND_PREFAB_PATH);
             GameObject rockPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(SMALL_ROCK_PREFAB_PATH);
             
             if (islandPrefab != null)
             {
-                // Create a tiled floor with many stones to look like a proper ruined arena
                 for (int x = -2; x <= 2; x++)
                 {
                     for (int z = -2; z <= 2; z++)
                     {
                         GameObject stone = (GameObject)PrefabUtility.InstantiatePrefab(islandPrefab);
                         stone.transform.SetParent(stage.transform, false);
-                        // Randomize position slightly for "natural" look
                         float offX = (x * 4.5f) + Random.Range(-0.5f, 0.5f);
                         float offZ = (z * 4.5f) + Random.Range(-0.5f, 0.5f);
                         stone.transform.localPosition = new Vector3(offX, -0.8f, offZ);
@@ -161,7 +168,6 @@ namespace AntiGravity.Editor
                     }
                 }
                 
-                // Add surrounding structures (columns)
                 if (rockPrefab != null)
                 {
                     for (int i = 0; i < 12; i++)
@@ -178,15 +184,13 @@ namespace AntiGravity.Editor
             }
             else
             {
-                // Absolute fallback (Better than metal cylinder)
                 var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 floor.transform.SetParent(stage.transform, false);
                 floor.transform.localPosition = new Vector3(0, -0.1f, 0);
                 floor.transform.localScale = new Vector3(20, 0.2f, 20);
-                floor.GetComponent<Renderer>().material.color = new Color(0.3f, 0.3f, 0.3f);
+                floor.GetComponent<Renderer>().sharedMaterial.color = new Color(0.3f, 0.3f, 0.3f);
             }
 
-            // 2. Add Background Decoration Islands (Non-playable but adds map feel)
             if (rockPrefab != null)
             {
                 for (int i = 0; i < 5; i++)
@@ -197,7 +201,6 @@ namespace AntiGravity.Editor
                     bgIsland.transform.localPosition = pos;
                     bgIsland.transform.localScale = Vector3.one * Random.Range(3, 8);
                     
-                    // Add a tree to background islands
                     GameObject treePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(TREE_PREFAB_PATH);
                     if (treePrefab != null)
                     {
@@ -209,7 +212,6 @@ namespace AntiGravity.Editor
                 }
             }
 
-            // 3. Add Flora to Main Stage
             GameObject mainTreePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(TREE_PREFAB_PATH);
             GameObject mainBushPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(BUSH_PREFAB_PATH);
             if (mainTreePrefab != null)
@@ -228,7 +230,7 @@ namespace AntiGravity.Editor
             // 5. Setup Sword for Player
             GameObject sword = SetupSword("VR_Sword_Player", new Vector3(0.3f, 1f, 0.3f));
             
-            // 6. Setup Enemy (Knight as the root object)
+            // 6. Setup Enemy
             GameObject[] oldEnemies = GameObject.FindObjectsOfType<GameObject>();
             foreach (var go in oldEnemies)
             {
@@ -261,32 +263,91 @@ namespace AntiGravity.Editor
             rb.mass = 10f;
             rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
 
-            if (enemy.GetComponent<Collider>() == null)
+            var charCtrl = enemy.GetComponent<CharacterController>();
+            if (charCtrl != null) Object.DestroyImmediate(charCtrl);
+
+            CapsuleCollider enemyCol = enemy.GetComponent<CapsuleCollider>();
+            if (enemyCol == null)
             {
-                var cap = enemy.AddComponent<CapsuleCollider>();
-                cap.center = new Vector3(0, 1, 0);
-                cap.height = 2f;
-                cap.radius = 0.3f;
+                enemyCol = enemy.AddComponent<CapsuleCollider>();
+                enemyCol.center = new Vector3(0, 1, 0);
+                enemyCol.height = 2f;
+                enemyCol.radius = 0.3f;
             }
 
             enemy.AddComponent<FallOutHandler>();
             enemy.AddComponent<EnemyAI>();
             
-            // Setup Animator
+            // Footstep Sound (Chainmail)
+            var footstepSource = enemy.AddComponent<AudioSource>();
+            footstepSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(FOOTSTEP_SFX_PATH);
+            footstepSource.loop = true;
+            footstepSource.playOnAwake = true;
+            footstepSource.volume = 0.4f;
+            footstepSource.spatialBlend = 1.0f;
+            footstepSource.spatialize = true;
+            footstepSource.minDistance = 1f;
+            footstepSource.maxDistance = 10f;
+            footstepSource.Play();
+            
             var animator = enemy.GetComponent<Animator>();
             if (animator == null) animator = enemy.AddComponent<Animator>();
             animator.runtimeAnimatorController = SetupAnimatorController();
             
             GameObject eSword = SetupSword("Enemy_Sword", new Vector3(0, 0, 0));
-            eSword.transform.SetParent(enemy.transform, false);
-            eSword.transform.localPosition = new Vector3(0.5f, 1.0f, 0.5f); 
-            eSword.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            
+            // Ignore collisions between Enemy and their own sword
+            foreach (var col in enemy.GetComponentsInChildren<Collider>())
+            {
+                foreach (var sCol in eSword.GetComponentsInChildren<Collider>())
+                {
+                    Physics.IgnoreCollision(col, sCol);
+                }
+            }
+            
+            Transform hand = enemy.transform.FindRecursive("RightHand");
+            if (hand == null) hand = enemy.transform.FindRecursive("hand_r");
+            if (hand == null) hand = enemy.transform.FindRecursive("Right_Hand");
+            
+            eSword.transform.SetParent(hand != null ? hand : enemy.transform, false);
+            eSword.transform.localPosition = new Vector3(0, 0.15f, 0);
+            eSword.transform.localRotation = Quaternion.Euler(0, 90, 90);
             eSword.transform.localScale = Vector3.one * 0.6f;
+
+            var eRb = eSword.GetComponent<Rigidbody>();
+            if (eRb != null) eRb.isKinematic = true;
 
             // 6. Setup UI
             SetupGameUI();
 
             Debug.Log("AntiGravity VR Game Setup Complete!");
+        }
+
+        private static void CreateTags()
+        {
+            SerializedObject tagManager = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]);
+            SerializedProperty tagsProp = tagManager.FindProperty("tags");
+
+            string[] tagsToCreate = { "Sword", "Enemy" };
+            foreach (string tag in tagsToCreate)
+            {
+                bool exists = false;
+                for (int i = 0; i < tagsProp.arraySize; i++)
+                {
+                    if (tagsProp.GetArrayElementAtIndex(i).stringValue == tag)
+                    {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists)
+                {
+                    tagsProp.InsertArrayElementAtIndex(0);
+                    tagsProp.GetArrayElementAtIndex(0).stringValue = tag;
+                }
+            }
+            tagManager.ApplyModifiedProperties();
         }
 
         private static void SetupGameUI()
@@ -295,27 +356,29 @@ namespace AntiGravity.Editor
             if (uiRoot != null) Undo.DestroyObjectImmediate(uiRoot);
 
             uiRoot = new GameObject("AntiGravity_UI");
-            uiRoot.transform.position = new Vector3(0, 1.5f, 2.0f); // In front of player
+            uiRoot.transform.position = new Vector3(0, 1.5f, 2.0f);
             
             var menuManager = uiRoot.AddComponent<AntiGravity.UI.MenuUIManager>();
 
-            // 1. Start Panel
             GameObject startPanel = CreateUIPanel("StartPanel", uiRoot.transform, "ANTI-GRAVITY", "START GAME");
-            
-            // 2. Victory Panel
             GameObject victoryPanel = CreateUIPanel("VictoryPanel", uiRoot.transform, "VICTORY!", "PLAY AGAIN");
             victoryPanel.SetActive(false);
+            GameObject defeatPanel = CreateUIPanel("DefeatPanel", uiRoot.transform, "DEFEAT...", "TRY AGAIN");
+            defeatPanel.SetActive(false);
 
-            // Link to manager
             var fStart = typeof(AntiGravity.UI.MenuUIManager).GetField("startPanel", BindingFlags.NonPublic | BindingFlags.Instance);
             var fVictory = typeof(AntiGravity.UI.MenuUIManager).GetField("victoryPanel", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fDefeat = typeof(AntiGravity.UI.MenuUIManager).GetField("defeatPanel", BindingFlags.NonPublic | BindingFlags.Instance);
             var fBtnStart = typeof(AntiGravity.UI.MenuUIManager).GetField("startButton", BindingFlags.NonPublic | BindingFlags.Instance);
             var fBtnRestart = typeof(AntiGravity.UI.MenuUIManager).GetField("restartButton", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fBtnTryAgain = typeof(AntiGravity.UI.MenuUIManager).GetField("tryAgainButton", BindingFlags.NonPublic | BindingFlags.Instance);
 
             if (fStart != null) fStart.SetValue(menuManager, startPanel);
             if (fVictory != null) fVictory.SetValue(menuManager, victoryPanel);
+            if (fDefeat != null) fDefeat.SetValue(menuManager, defeatPanel);
             if (fBtnStart != null) fBtnStart.SetValue(menuManager, startPanel.GetComponentInChildren<Button>());
             if (fBtnRestart != null) fBtnRestart.SetValue(menuManager, victoryPanel.GetComponentInChildren<Button>());
+            if (fBtnTryAgain != null) fBtnTryAgain.SetValue(menuManager, defeatPanel.GetComponentInChildren<Button>());
         }
 
         private static GameObject CreateUIPanel(string name, Transform parent, string titleText, string buttonText)
@@ -330,14 +393,12 @@ namespace AntiGravity.Editor
             panel.GetComponent<RectTransform>().sizeDelta = new Vector2(400, 300);
             panel.transform.localScale = Vector3.one * 0.005f;
 
-            // Background
             GameObject bg = new GameObject("Background");
             bg.transform.SetParent(panel.transform, false);
             var img = bg.AddComponent<Image>();
             img.color = new Color(0, 0, 0, 0.8f);
             bg.GetComponent<RectTransform>().sizeDelta = new Vector2(400, 300);
 
-            // Title
             GameObject title = new GameObject("Title");
             title.transform.SetParent(panel.transform, false);
             title.transform.localPosition = new Vector3(0, 80, 0);
@@ -347,7 +408,6 @@ namespace AntiGravity.Editor
             tmpTitle.alignment = TextAlignmentOptions.Center;
             title.GetComponent<RectTransform>().sizeDelta = new Vector2(400, 100);
 
-            // Button
             GameObject btnObj = new GameObject("Button");
             btnObj.transform.SetParent(panel.transform, false);
             btnObj.transform.localPosition = new Vector3(0, -50, 0);
@@ -377,7 +437,6 @@ namespace AntiGravity.Editor
             sword.tag = "Sword";
             sword.transform.position = pos;
             
-            // 1. Physics setup
             var rb = sword.AddComponent<Rigidbody>();
             rb.mass = 2f;
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
@@ -386,58 +445,84 @@ namespace AntiGravity.Editor
             grab.movementType = XRBaseInteractable.MovementType.VelocityTracking;
             
             var swordComp = sword.AddComponent<Sword>();
-            sword.AddComponent<SwordVisuals>();
 
-            // 2. Visual Parts
-            // Hilt (柄)
             GameObject hilt = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             hilt.name = "Hilt";
             hilt.transform.SetParent(sword.transform, false);
             hilt.transform.localPosition = new Vector3(0, 0, -0.4f);
             hilt.transform.localScale = new Vector3(0.03f, 0.15f, 0.03f);
             hilt.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            hilt.GetComponent<Renderer>().material.color = new Color(0.2f, 0.2f, 0.2f);
+            hilt.GetComponent<Renderer>().sharedMaterial.color = new Color(0.2f, 0.2f, 0.2f);
             Object.DestroyImmediate(hilt.GetComponent<Collider>());
 
-            // Guard (鍔)
             GameObject guard = GameObject.CreatePrimitive(PrimitiveType.Cube);
             guard.name = "Guard";
             guard.transform.SetParent(sword.transform, false);
             guard.transform.localPosition = new Vector3(0, 0, -0.2f);
             guard.transform.localScale = new Vector3(0.15f, 0.03f, 0.05f);
-            guard.GetComponent<Renderer>().material.color = new Color(0.3f, 0.3f, 0.3f);
+            guard.GetComponent<Renderer>().sharedMaterial.color = new Color(0.3f, 0.3f, 0.3f);
             Object.DestroyImmediate(guard.GetComponent<Collider>());
 
-            // Blade (刃)
             GameObject blade = GameObject.CreatePrimitive(PrimitiveType.Cube);
             blade.name = "Blade";
             blade.transform.SetParent(sword.transform, false);
             blade.transform.localPosition = new Vector3(0, 0, 0.3f);
             blade.transform.localScale = new Vector3(0.08f, 0.01f, 1.0f);
-            blade.GetComponent<Renderer>().material.color = new Color(0.8f, 0.8f, 0.9f);
+            var bladeRenderer = blade.GetComponent<Renderer>();
+            bladeRenderer.sharedMaterial.color = new Color(0.8f, 0.8f, 0.9f);
             
-            // The Collider should be on the blade for clashing
             var col = blade.GetComponent<BoxCollider>();
             if (col == null) col = blade.AddComponent<BoxCollider>();
 
-            // 3. Audio & Effects
+            var trail = blade.AddComponent<TrailRenderer>();
+            trail.time = 0.2f;
+            trail.startWidth = 0.08f;
+            trail.endWidth = 0f;
+            trail.material = new Material(Shader.Find("Sprites/Default"));
+            trail.startColor = Color.yellow;
+            trail.enabled = false;
+
+            GameObject auraObj = null;
+            ParticleSystem auraPs = null;
+            GameObject auraPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(AURA_VFX_PATH);
+            if (auraPrefab != null)
+            {
+                auraObj = (GameObject)PrefabUtility.InstantiatePrefab(auraPrefab);
+                auraObj.transform.SetParent(hilt.transform, false);
+                auraObj.transform.localPosition = Vector3.zero;
+                auraPs = auraObj.GetComponent<ParticleSystem>();
+                if (auraPs == null) auraPs = auraObj.GetComponentInChildren<ParticleSystem>();
+                if (auraPs != null)
+                {
+                    var main = auraPs.main;
+                    main.playOnAwake = false;
+                    auraPs.Stop();
+                }
+            }
+
             var source = sword.AddComponent<AudioSource>();
             source.playOnAwake = false;
             source.spatialBlend = 1.0f;
+            source.spatialize = true; // Meta Quest spatial audio
 
             var fSource = typeof(Sword).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
             var fClash = typeof(Sword).GetField("clashClip", BindingFlags.NonPublic | BindingFlags.Instance);
             var fIssen = typeof(Sword).GetField("issenClip", BindingFlags.NonPublic | BindingFlags.Instance);
             var fSpark = typeof(Sword).GetField("sparkPrefab", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fRenderer = typeof(Sword).GetField("swordRenderer", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fTrail = typeof(Sword).GetField("swordTrail", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fAura = typeof(Sword).GetField("auraParticles", BindingFlags.NonPublic | BindingFlags.Instance);
 
             if (fSource != null) fSource.SetValue(swordComp, source);
             if (fClash != null) fClash.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<AudioClip>(CLASH_SFX_PATH));
             if (fIssen != null) fIssen.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<AudioClip>(ISSEN_SFX_PATH));
             if (fSpark != null) fSpark.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<GameObject>(SPARK_VFX_PATH));
+            if (fRenderer != null) fRenderer.SetValue(swordComp, bladeRenderer);
+            if (fTrail != null) fTrail.SetValue(swordComp, trail);
+            if (fAura != null) fAura.SetValue(swordComp, auraPs);
 
             return sword;
         }
-
 
         private static void CreateDecoration(GameObject prefab, Transform parent, Vector3 pos, Vector3 scale)
         {
@@ -446,13 +531,11 @@ namespace AntiGravity.Editor
             instance.transform.localPosition = pos;
             instance.transform.localScale = scale;
             instance.transform.localRotation = Quaternion.Euler(Random.Range(-10, 10), Random.Range(0, 360), Random.Range(-10, 10));
-            
             AddCollidersRecursively(instance);
         }
 
         private static void SetupWristUI(GameObject xrOrigin)
         {
-            // Find Left Hand for Wrist UI
             Transform leftHand = xrOrigin.transform.Find("Camera Offset/Left Controller");
             if (leftHand == null) return;
 
@@ -467,7 +550,6 @@ namespace AntiGravity.Editor
             canvasObj.AddComponent<CanvasScaler>();
             canvasObj.AddComponent<GraphicRaycaster>();
 
-            // 1. Gauge Background
             GameObject bgObj = new GameObject("Background");
             bgObj.transform.SetParent(canvasObj.transform, false);
             var bgImg = bgObj.AddComponent<Image>();
@@ -475,7 +557,6 @@ namespace AntiGravity.Editor
             bgImg.color = new Color(1, 1, 1, 0.5f);
             bgObj.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 100);
 
-            // 2. Gauge Fill
             GameObject fillObj = new GameObject("Fill");
             fillObj.transform.SetParent(canvasObj.transform, false);
             var fillImg = fillObj.AddComponent<Image>();
@@ -486,7 +567,6 @@ namespace AntiGravity.Editor
             fillImg.fillAmount = 0f;
             fillObj.GetComponent<RectTransform>().sizeDelta = new Vector2(90, 90);
 
-            // 3. Status Text
             GameObject textObj = new GameObject("StatusText");
             textObj.transform.SetParent(canvasObj.transform, false);
             textObj.transform.localPosition = new Vector3(0, -60, 0);
@@ -496,12 +576,9 @@ namespace AntiGravity.Editor
             tmp.alignment = TextAlignmentOptions.Center;
             textObj.GetComponent<RectTransform>().sizeDelta = new Vector2(200, 50);
 
-            // 4. Link with Logic
             var uiComp = canvasObj.AddComponent<SwordGaugeUI>();
-            
             var fFill = typeof(SwordGaugeUI).GetField("fillImage", BindingFlags.NonPublic | BindingFlags.Instance);
             var fText = typeof(SwordGaugeUI).GetField("statusText", BindingFlags.NonPublic | BindingFlags.Instance);
-            
             if (fFill != null) fFill.SetValue(uiComp, fillImg);
             if (fText != null) fText.SetValue(uiComp, tmp);
         }
@@ -514,10 +591,10 @@ namespace AntiGravity.Editor
                 controller = AnimatorController.CreateAnimatorControllerAtPath(ANIM_CONTROLLER_PATH);
                 controller.AddParameter("IsWalking", AnimatorControllerParameterType.Bool);
                 controller.AddParameter("Attack", AnimatorControllerParameterType.Trigger);
+                controller.AddParameter("Recoil", AnimatorControllerParameterType.Trigger);
 
                 var rootStateMachine = controller.layers[0].stateMachine;
 
-                // Load clips
                 AnimationClip idleClip = GetClipFromFBX(IDLE_ANIM_PATH);
                 AnimationClip walkClip = GetClipFromFBX(WALK_ANIM_PATH);
                 AnimationClip attackClip = GetClipFromFBX(ATTACK_ANIM_PATH);
@@ -530,25 +607,18 @@ namespace AntiGravity.Editor
 
                 var attackState = rootStateMachine.AddState("Attack");
                 attackState.motion = attackClip;
+                
+                var recoilState = rootStateMachine.AddState("Recoil");
 
-                // Transitions
-                var toWalk = idleState.AddTransition(walkState);
-                toWalk.AddCondition(AnimatorConditionMode.If, 0, "IsWalking");
+                idleState.AddTransition(walkState).AddCondition(AnimatorConditionMode.If, 0, "IsWalking");
+                walkState.AddTransition(idleState).AddCondition(AnimatorConditionMode.IfNot, 0, "IsWalking");
+                idleState.AddTransition(attackState).AddCondition(AnimatorConditionMode.If, 0, "Attack");
+                walkState.AddTransition(attackState).AddCondition(AnimatorConditionMode.If, 0, "Attack");
+                attackState.AddTransition(idleState).hasExitTime = true;
 
-                var toIdle = walkState.AddTransition(idleState);
-                toIdle.AddCondition(AnimatorConditionMode.IfNot, 0, "IsWalking");
-
-                var toAttackFromIdle = idleState.AddTransition(attackState);
-                toAttackFromIdle.AddCondition(AnimatorConditionMode.If, 0, "Attack");
-
-                var toAttackFromWalk = walkState.AddTransition(attackState);
-                toAttackFromWalk.AddCondition(AnimatorConditionMode.If, 0, "Attack");
-
-                var backToIdle = attackState.AddTransition(idleState);
-                backToIdle.hasExitTime = true;
-                backToIdle.exitTime = 0.9f;
-
-                Debug.Log("Created Knight Animator Controller.");
+                var toRecoil = rootStateMachine.AddAnyStateTransition(recoilState);
+                toRecoil.AddCondition(AnimatorConditionMode.If, 0, "Recoil");
+                recoilState.AddTransition(idleState).hasExitTime = true;
             }
             return controller;
         }
@@ -558,10 +628,7 @@ namespace AntiGravity.Editor
             var assets = AssetDatabase.LoadAllAssetsAtPath(path);
             foreach (var asset in assets)
             {
-                if (asset is AnimationClip && !asset.name.Contains("__preview__"))
-                {
-                    return (AnimationClip)asset;
-                }
+                if (asset is AnimationClip && !asset.name.Contains("__preview__")) return (AnimationClip)asset;
             }
             return null;
         }
@@ -577,6 +644,20 @@ namespace AntiGravity.Editor
                     mc.convex = true;
                 }
             }
+        }
+    }
+
+    public static class TransformExtensions
+    {
+        public static Transform FindRecursive(this Transform parent, string name)
+        {
+            foreach (Transform child in parent)
+            {
+                if (child.name.Contains(name)) return child;
+                Transform result = child.FindRecursive(name);
+                if (result != null) return result;
+            }
+            return null;
         }
     }
 }

@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 namespace AntiGravity
 {
@@ -11,12 +12,16 @@ namespace AntiGravity
         
         private Transform player;
         private float nextSwingTime;
+        private bool isRecoiling = false;
+        public bool IsInvincible => isRecoiling;
+
         private Rigidbody rb;
         private Transform swordHand;
         private Animator animator;
 
         private static readonly int IsWalking = Animator.StringToHash("IsWalking");
         private static readonly int Attack = Animator.StringToHash("Attack");
+        private static readonly int Recoil = Animator.StringToHash("Recoil");
 
         private void Start()
         {
@@ -28,9 +33,31 @@ namespace AntiGravity
             swordHand = transform.Find("Enemy_Sword");
         }
 
+        public void TriggerRecoil(float duration = 1.0f)
+        {
+            if (isRecoiling) return;
+            StartCoroutine(RecoilRoutine(duration));
+        }
+
+        private IEnumerator RecoilRoutine(float duration)
+        {
+            isRecoiling = true;
+            if (animator != null) animator.SetTrigger(Recoil);
+            
+            yield return new WaitForSeconds(duration);
+            
+            isRecoiling = false;
+        }
+
         private void FixedUpdate()
         {
-            if (player == null) return;
+            if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.GameState.Playing)
+            {
+                if (animator != null) animator.SetBool(IsWalking, false);
+                return;
+            }
+
+            if (isRecoiling || player == null) return;
 
             float distance = Vector3.Distance(transform.position, player.position);
 
