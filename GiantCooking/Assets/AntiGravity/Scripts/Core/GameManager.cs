@@ -17,6 +17,10 @@ namespace AntiGravity
         public float CurrentGauge => currentGauge;
         public bool IsIssenActive => isIssenActive;
 
+        [Header("Audio Settings")]
+        [SerializeField] private AudioSource audioSource;
+        [SerializeField] private AudioClip gaugeMaxClip;
+
         public UnityEvent<float> OnGaugeChanged;
         public UnityEvent OnGaugeMaxed;
 
@@ -54,6 +58,10 @@ namespace AntiGravity
             {
                 isIssenActive = true;
                 OnGaugeMaxed?.Invoke();
+                if (audioSource != null && gaugeMaxClip != null)
+                {
+                    audioSource.PlayOneShot(gaugeMaxClip);
+                }
                 Debug.Log("Kiwami Gauge MAX!");
             }
         }

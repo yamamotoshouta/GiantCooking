@@ -11,6 +11,12 @@ namespace AntiGravity
         [SerializeField] private float bounceForce = 5f;
         [SerializeField] private float hapticIntensity = 0.5f;
         [SerializeField] private float hapticDuration = 0.1f;
+
+        [Header("Audio & Visual Settings")]
+        [SerializeField] private AudioSource audioSource;
+        [SerializeField] private AudioClip clashClip;
+        [SerializeField] private AudioClip issenClip;
+        [SerializeField] private GameObject sparkPrefab;
         
         private UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable interactable;
         private Rigidbody rb;
@@ -48,6 +54,17 @@ namespace AntiGravity
                 GameManager.Instance.AddGauge(0.05f);
             }
 
+            // Play Sound & VFX
+            if (audioSource != null && clashClip != null)
+            {
+                audioSource.PlayOneShot(clashClip);
+            }
+
+            if (sparkPrefab != null)
+            {
+                Instantiate(sparkPrefab, collision.contacts[0].point, Quaternion.identity);
+            }
+
             Debug.Log("Sword Clash!");
         }
 
@@ -62,6 +79,13 @@ namespace AntiGravity
                     Vector3 blowbackDir = (collision.transform.position - transform.position).normalized;
                     blowbackDir.y = 0.2f; // Slight upward lift
                     enemyRb.AddForce(blowbackDir * 20f, ForceMode.Impulse);
+                    
+                    // Play Sound
+                    if (audioSource != null && issenClip != null)
+                    {
+                        audioSource.PlayOneShot(issenClip);
+                    }
+
                     GameManager.Instance.ResetGauge();
                     Debug.Log("Issen Blast!");
                 }
