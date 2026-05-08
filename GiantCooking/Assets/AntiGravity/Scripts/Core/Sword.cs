@@ -9,7 +9,8 @@ namespace AntiGravity
     {
         [Header("Settings")]
         [SerializeField] private float bounceForce = 5f;
-        [SerializeField] private float hapticIntensity = 0.5f;
+        [SerializeField] private float minHapticIntensity = 0.1f;
+        [SerializeField] private float maxHapticIntensity = 0.8f;
         [SerializeField] private float hapticDuration = 0.1f;
 
         [Header("Audio & Visual Settings")]
@@ -17,14 +18,60 @@ namespace AntiGravity
         [SerializeField] private AudioClip clashClip;
         [SerializeField] private AudioClip issenClip;
         [SerializeField] private GameObject sparkPrefab;
+        [SerializeField] private Renderer swordRenderer;
+        [SerializeField] private Color issenColor = Color.yellow;
         
         private UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable interactable;
         private Rigidbody rb;
+        private Material swordMaterial;
+        private Color originalColor;
 
         private void Awake()
         {
             interactable = GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
             rb = GetComponent<Rigidbody>();
+            
+            if (swordRenderer != null)
+            {
+                swordMaterial = swordRenderer.material;
+                originalColor = swordMaterial.GetColor("_EmissionColor");
+            }
+        }
+
+        private void OnEnable()
+        {
+            if (interactable != null)
+            {
+                interactable.activated.AddListener(OnTriggerPulled);
+            }
+            
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnIssenActivated.AddListener(EnableIssenVisuals);
+                GameManager.Instance.OnGaugeChanged.AddListener(HandleGaugeResetVisuals);
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (interactable != null)
+            {
+                interactable.activated.RemoveListener(OnTriggerPulled);
+            }
+
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnIssenActivated.RemoveListener(EnableIssenVisuals);
+                GameManager.Instance.OnGaugeChanged.RemoveListener(HandleGaugeResetVisuals);
+            }
+        }
+
+        private void OnTriggerPulled(ActivateEventArgs args)
+        {
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.TryActivateIssen();
+            }
         }
 
         private void OnCollisionEnter(Collision collision)
@@ -41,12 +88,16 @@ namespace AntiGravity
 
         private void HandleSwordClash(Collision collision)
         {
+            // Calculate relative velocity for dynamic haptics
+            float relativeVel = collision.relativeVelocity.magnitude;
+            float intensity = Mathf.Clamp(relativeVel / 10f, minHapticIntensity, maxHapticIntensity);
+
             // Calculate bounce direction
             Vector3 bounceDir = (transform.position - collision.contacts[0].point).normalized;
             rb.AddForce(bounceDir * bounceForce, ForceMode.Impulse);
 
             // Trigger Haptics
-            TriggerHaptics();
+            TriggerHaptics(intensity);
 
             // Add to Gauge
             if (GameManager.Instance != null)
@@ -65,7 +116,7 @@ namespace AntiGravity
                 Instantiate(sparkPrefab, collision.contacts[0].point, Quaternion.identity);
             }
 
-            Debug.Log("Sword Clash!");
+            Debug.Log($"Sword Clash! Intensity: {intensity}");
         }
 
         private void HandleEnemyHit(Collision collision)
@@ -92,14 +143,31 @@ namespace AntiGravity
             }
         }
 
-        private void TriggerHaptics()
+        private void EnableIssenVisuals()
+        {
+            if (swordMaterial != null)
+            {
+                swordMaterial.SetColor("_EmissionColor", issenColor);
+                swordMaterial.EnableKeyword("_EMISSION");
+            }
+        }
+
+        private void HandleGaugeResetVisuals(float ratio)
+        {
+            if (ratio <= 0 && swordMaterial != null)
+            {
+                swordMaterial.SetColor("_EmissionColor", originalColor);
+            }
+        }
+
+        private void TriggerHaptics(float intensity)
         {
             if (interactable != null && interactable.isSelected)
             {
                 var interactor = interactable.firstInteractorSelecting;
                 if (interactor is UnityEngine.XR.Interaction.Toolkit.Interactors.XRBaseInputInteractor controllerInteractor)
                 {
-                    controllerInteractor.xrController.SendHapticImpulse(hapticIntensity, hapticDuration);
+                    controllerInteractor.xrController.SendHapticImpulse(intensity, hapticDuration);
                 }
             }
         }

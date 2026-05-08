@@ -1,4 +1,6 @@
 using UnityEngine;
+using System.Collections;
+using AntiGravity.System;
 
 namespace AntiGravity
 {
@@ -14,18 +16,31 @@ namespace AntiGravity
             startPosition = transform.position;
         }
 
+        private bool isFading = false;
+
         private void Update()
         {
-            if (transform.position.y < fallThreshold)
+            if (!isFading && transform.position.y < fallThreshold)
             {
-                OnFallOut();
+                StartCoroutine(FallOutRoutine());
             }
         }
 
-        private void OnFallOut()
+        private IEnumerator FallOutRoutine()
         {
+            isFading = true;
             Debug.Log(gameObject.name + " fell out!");
-            // Reset position for demo purposes
+
+            if (gameObject.CompareTag("Player") && ScreenFader.Instance != null)
+            {
+                yield return ScreenFader.Instance.FadeOut(0.5f);
+            }
+            else if (gameObject.CompareTag("Enemy") && GameManager.Instance != null)
+            {
+                GameManager.Instance.TriggerVictory();
+            }
+
+            // Reset position
             transform.position = startPosition;
             Rigidbody rb = GetComponent<Rigidbody>();
             if (rb != null)
@@ -33,8 +48,13 @@ namespace AntiGravity
                 rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
             }
-            
-            // In a real game, you would trigger a win/loss screen here
+
+            if (gameObject.CompareTag("Player") && ScreenFader.Instance != null)
+            {
+                yield return ScreenFader.Instance.FadeIn(0.5f);
+            }
+
+            isFading = false;
         }
     }
 }

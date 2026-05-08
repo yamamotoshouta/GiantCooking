@@ -4,6 +4,7 @@ using UnityEditor.Animations;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using System.Reflection;
 
 namespace AntiGravity.Editor
 {
@@ -80,8 +81,8 @@ namespace AntiGravity.Editor
                 source.playOnAwake = false;
                 source.spatialBlend = 0f; // 2D for UI-like sounds
                 
-                var propSource = typeof(GameManager).GetField("audioSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var propClip = typeof(GameManager).GetField("gaugeMaxClip", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var propSource = typeof(GameManager).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
+                var propClip = typeof(GameManager).GetField("gaugeMaxClip", BindingFlags.NonPublic | BindingFlags.Instance);
                 
                 if (propSource != null) propSource.SetValue(manager, source);
                 if (propClip != null) propClip.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(GAUGE_MAX_SFX_PATH));
@@ -282,7 +283,89 @@ namespace AntiGravity.Editor
             eSword.transform.localRotation = Quaternion.Euler(0, 0, 90);
             eSword.transform.localScale = Vector3.one * 0.6f;
 
+            // 6. Setup UI
+            SetupGameUI();
+
             Debug.Log("AntiGravity VR Game Setup Complete!");
+        }
+
+        private static void SetupGameUI()
+        {
+            GameObject uiRoot = GameObject.Find("AntiGravity_UI");
+            if (uiRoot != null) Undo.DestroyObjectImmediate(uiRoot);
+
+            uiRoot = new GameObject("AntiGravity_UI");
+            uiRoot.transform.position = new Vector3(0, 1.5f, 2.0f); // In front of player
+            
+            var menuManager = uiRoot.AddComponent<AntiGravity.UI.MenuUIManager>();
+
+            // 1. Start Panel
+            GameObject startPanel = CreateUIPanel("StartPanel", uiRoot.transform, "ANTI-GRAVITY", "START GAME");
+            
+            // 2. Victory Panel
+            GameObject victoryPanel = CreateUIPanel("VictoryPanel", uiRoot.transform, "VICTORY!", "PLAY AGAIN");
+            victoryPanel.SetActive(false);
+
+            // Link to manager
+            var fStart = typeof(AntiGravity.UI.MenuUIManager).GetField("startPanel", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fVictory = typeof(AntiGravity.UI.MenuUIManager).GetField("victoryPanel", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fBtnStart = typeof(AntiGravity.UI.MenuUIManager).GetField("startButton", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fBtnRestart = typeof(AntiGravity.UI.MenuUIManager).GetField("restartButton", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            if (fStart != null) fStart.SetValue(menuManager, startPanel);
+            if (fVictory != null) fVictory.SetValue(menuManager, victoryPanel);
+            if (fBtnStart != null) fBtnStart.SetValue(menuManager, startPanel.GetComponentInChildren<Button>());
+            if (fBtnRestart != null) fBtnRestart.SetValue(menuManager, victoryPanel.GetComponentInChildren<Button>());
+        }
+
+        private static GameObject CreateUIPanel(string name, Transform parent, string titleText, string buttonText)
+        {
+            GameObject panel = new GameObject(name);
+            panel.transform.SetParent(parent, false);
+            
+            Canvas canvas = panel.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            panel.AddComponent<CanvasScaler>();
+            panel.AddComponent<GraphicRaycaster>();
+            panel.GetComponent<RectTransform>().sizeDelta = new Vector2(400, 300);
+            panel.transform.localScale = Vector3.one * 0.005f;
+
+            // Background
+            GameObject bg = new GameObject("Background");
+            bg.transform.SetParent(panel.transform, false);
+            var img = bg.AddComponent<Image>();
+            img.color = new Color(0, 0, 0, 0.8f);
+            bg.GetComponent<RectTransform>().sizeDelta = new Vector2(400, 300);
+
+            // Title
+            GameObject title = new GameObject("Title");
+            title.transform.SetParent(panel.transform, false);
+            title.transform.localPosition = new Vector3(0, 80, 0);
+            var tmpTitle = title.AddComponent<TextMeshProUGUI>();
+            tmpTitle.text = titleText;
+            tmpTitle.fontSize = 48;
+            tmpTitle.alignment = TextAlignmentOptions.Center;
+            title.GetComponent<RectTransform>().sizeDelta = new Vector2(400, 100);
+
+            // Button
+            GameObject btnObj = new GameObject("Button");
+            btnObj.transform.SetParent(panel.transform, false);
+            btnObj.transform.localPosition = new Vector3(0, -50, 0);
+            var btnImg = btnObj.AddComponent<Image>();
+            btnImg.color = Color.white;
+            var btn = btnObj.AddComponent<Button>();
+            btnObj.GetComponent<RectTransform>().sizeDelta = new Vector2(200, 60);
+
+            GameObject btnTextObj = new GameObject("Text");
+            btnTextObj.transform.SetParent(btnObj.transform, false);
+            var tmpBtn = btnTextObj.AddComponent<TextMeshProUGUI>();
+            tmpBtn.text = buttonText;
+            tmpBtn.color = Color.black;
+            tmpBtn.fontSize = 24;
+            tmpBtn.alignment = TextAlignmentOptions.Center;
+            btnTextObj.GetComponent<RectTransform>().sizeDelta = new Vector2(200, 60);
+
+            return panel;
         }
 
         private static GameObject SetupSword(string name, Vector3 pos)
@@ -342,10 +425,10 @@ namespace AntiGravity.Editor
             source.playOnAwake = false;
             source.spatialBlend = 1.0f;
 
-            var fSource = typeof(Sword).GetField("audioSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var fClash = typeof(Sword).GetField("clashClip", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var fIssen = typeof(Sword).GetField("issenClip", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var fSpark = typeof(Sword).GetField("sparkPrefab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var fSource = typeof(Sword).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fClash = typeof(Sword).GetField("clashClip", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fIssen = typeof(Sword).GetField("issenClip", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fSpark = typeof(Sword).GetField("sparkPrefab", BindingFlags.NonPublic | BindingFlags.Instance);
 
             if (fSource != null) fSource.SetValue(swordComp, source);
             if (fClash != null) fClash.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<AudioClip>(CLASH_SFX_PATH));
@@ -416,8 +499,8 @@ namespace AntiGravity.Editor
             // 4. Link with Logic
             var uiComp = canvasObj.AddComponent<SwordGaugeUI>();
             
-            var fFill = typeof(SwordGaugeUI).GetField("fillImage", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var fText = typeof(SwordGaugeUI).GetField("statusText", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var fFill = typeof(SwordGaugeUI).GetField("fillImage", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fText = typeof(SwordGaugeUI).GetField("statusText", BindingFlags.NonPublic | BindingFlags.Instance);
             
             if (fFill != null) fFill.SetValue(uiComp, fillImg);
             if (fText != null) fText.SetValue(uiComp, tmp);
