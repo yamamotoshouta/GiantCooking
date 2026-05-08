@@ -13,10 +13,51 @@ namespace AntiGravity.Editor
         private const string ISSEN_SFX_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-28.wav";
         private const string GAUGE_MAX_SFX_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-45.wav";
         private const string SPARK_VFX_PATH = "Assets/UnityTechnologies/ParticlePack/EffectExamples/Weapon Effects/Prefabs/MetalImpacts.prefab";
+        private const string SKYBOX_MAT_PATH = "Assets/VRTemplateAssets/Materials/Skybox/Hub Skybox Blue 2.mat"; // Stable VR skybox
+        private const string ISLAND_PREFAB_PATH = "Assets/Low_Poly_Nature_Pack_Lite/Prefabs/Stones/Stone_5_moss.prefab";
+        private const string SMALL_ROCK_PREFAB_PATH = "Assets/Low_Poly_Nature_Pack_Lite/Prefabs/Stones/Stone_5_moss.prefab";
+        private const string TREE_PREFAB_PATH = "Assets/Low_Poly_Nature_Pack_Lite/Prefabs/Trees/Tree_01_summer.prefab";
+        private const string BUSH_PREFAB_PATH = "Assets/Low_Poly_Nature_Pack_Lite/Prefabs/Bushes/Bush_11_summer.prefab";
 
         [MenuItem("AntiGravity/Create VR Game Scene")]
         public static void CreateVRGame()
         {
+            // 0. Reset Environment and Setup Proper Sky
+            Material skyboxMat = AssetDatabase.LoadAssetAtPath<Material>(SKYBOX_MAT_PATH);
+            if (skyboxMat != null)
+            {
+                RenderSettings.skybox = skyboxMat;
+            }
+            else
+            {
+                RenderSettings.skybox = null; // Revert to Unity default if not found
+            }
+
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Skybox;
+            RenderSettings.ambientIntensity = 1.0f;
+            RenderSettings.fog = false;
+            
+            // Ensure Directional Light is clean and white
+            Light dirLight = GameObject.FindObjectOfType<Light>();
+            if (dirLight != null && dirLight.type == LightType.Directional)
+            {
+                dirLight.color = Color.white;
+                dirLight.intensity = 1.0f;
+            }
+
+            // Disable any scripts that might force yellow colors (FastSky remnants)
+            var allComponents = GameObject.FindObjectsOfType<MonoBehaviour>();
+            foreach (var comp in allComponents)
+            {
+                string typeName = comp.GetType().Name;
+                if (typeName == "Volume" || typeName == "FastSky_Sun_Color")
+                {
+                    comp.enabled = false;
+                }
+            }
+
+            DynamicGI.UpdateEnvironment();
+
             GameObject gm = GameObject.Find("AntiGravity_GameManager");
             if (gm == null)
             {
@@ -27,10 +68,6 @@ namespace AntiGravity.Editor
                 var source = gm.AddComponent<AudioSource>();
                 source.playOnAwake = false;
                 source.spatialBlend = 0f; // 2D for UI-like sounds
-                
-                // Use reflection or just direct assignment if we are in the same assembly
-                // But since GameManager is in a different asmdef, we need to be careful.
-                // However, the setup script usually has access to all.
                 
                 var propSource = typeof(GameManager).GetField("audioSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 var propClip = typeof(GameManager).GetField("gaugeMaxClip", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
@@ -74,8 +111,6 @@ namespace AntiGravity.Editor
                         var controller = gm.GetComponent<VignetteController>();
                         if (controller == null) controller = gm.AddComponent<VignetteController>();
                         
-                        // Use reflection or Find to set the field if it's private, 
-                        // but here we'll just let the user assign it or try to find it.
                         Debug.Log("Added Tunneling Vignette and VignetteController.");
                     }
                 }
@@ -84,57 +119,135 @@ namespace AntiGravity.Editor
                 SetupWristUI(xrOrigin);
             }
 
-            // 3. GameManager is already setup at the beginning.
+            // 4. Setup Stage (The Floating Ruins Map)
+            GameObject oldStage = GameObject.Find("BattleStage");
+            if (oldStage != null) Undo.DestroyObjectImmediate(oldStage);
 
-            // 4. Setup Stage (The Floating Island)
-            GameObject stage = GameObject.Find("BattleStage");
-            if (stage == null)
+            GameObject stage = new GameObject("BattleStage");
+            stage.transform.position = Vector3.zero;
+            
+            // 1. Create a "Proper Map" Floor (9 stones arranged in a flat-ish area)
+            GameObject islandPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ISLAND_PREFAB_PATH);
+            GameObject rockPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(SMALL_ROCK_PREFAB_PATH);
+            
+            if (islandPrefab != null)
             {
-                stage = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                stage.name = "BattleStage";
-                stage.transform.position = new Vector3(0, -0.05f, 0);
-                stage.transform.localScale = new Vector3(5, 0.1f, 5);
-                stage.AddComponent<FallOutHandler>();
+                // Create a tiled floor with many stones to look like a proper ruined arena
+                for (int x = -2; x <= 2; x++)
+                {
+                    for (int z = -2; z <= 2; z++)
+                    {
+                        GameObject stone = (GameObject)PrefabUtility.InstantiatePrefab(islandPrefab);
+                        stone.transform.SetParent(stage.transform, false);
+                        // Randomize position slightly for "natural" look
+                        float offX = (x * 4.5f) + Random.Range(-0.5f, 0.5f);
+                        float offZ = (z * 4.5f) + Random.Range(-0.5f, 0.5f);
+                        stone.transform.localPosition = new Vector3(offX, -0.8f, offZ);
+                        stone.transform.localScale = new Vector3(6, 1.5f, 6);
+                        stone.transform.localRotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
+                        AddCollidersRecursively(stone);
+                    }
+                }
                 
-                // Add a simple grid material if possible
-                Renderer rend = stage.GetComponent<Renderer>();
-                rend.material.color = new Color(0.2f, 0.2f, 0.2f);
+                // Add surrounding structures (columns)
+                if (rockPrefab != null)
+                {
+                    for (int i = 0; i < 12; i++)
+                    {
+                        float angle = i * 30 * Mathf.Deg2Rad;
+                        Vector3 pos = new Vector3(Mathf.Cos(angle) * 12, -0.5f, Mathf.Sin(angle) * 12);
+                        GameObject pillar = (GameObject)PrefabUtility.InstantiatePrefab(rockPrefab);
+                        pillar.transform.SetParent(stage.transform, false);
+                        pillar.transform.localPosition = pos;
+                        pillar.transform.localScale = new Vector3(2, Random.Range(5, 10), 2);
+                        AddCollidersRecursively(pillar);
+                    }
+                }
             }
+            else
+            {
+                // Absolute fallback (Better than metal cylinder)
+                var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floor.transform.SetParent(stage.transform, false);
+                floor.transform.localPosition = new Vector3(0, -0.1f, 0);
+                floor.transform.localScale = new Vector3(20, 0.2f, 20);
+                floor.GetComponent<Renderer>().material.color = new Color(0.3f, 0.3f, 0.3f);
+            }
+
+            // 2. Add Background Decoration Islands (Non-playable but adds map feel)
+            if (rockPrefab != null)
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    Vector3 pos = new Vector3(Random.Range(-20, 20), Random.Range(-10, 10), Random.Range(15, 30));
+                    GameObject bgIsland = (GameObject)PrefabUtility.InstantiatePrefab(rockPrefab);
+                    bgIsland.transform.SetParent(stage.transform, false);
+                    bgIsland.transform.localPosition = pos;
+                    bgIsland.transform.localScale = Vector3.one * Random.Range(3, 8);
+                    
+                    // Add a tree to background islands
+                    GameObject treePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(TREE_PREFAB_PATH);
+                    if (treePrefab != null)
+                    {
+                        GameObject bgTree = (GameObject)PrefabUtility.InstantiatePrefab(treePrefab);
+                        bgTree.transform.SetParent(bgIsland.transform, false);
+                        bgTree.transform.localPosition = new Vector3(0, 0.5f, 0);
+                        bgTree.transform.localScale = Vector3.one * 0.2f;
+                    }
+                }
+            }
+
+            // 3. Add Flora to Main Stage
+            GameObject mainTreePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(TREE_PREFAB_PATH);
+            GameObject mainBushPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(BUSH_PREFAB_PATH);
+            if (mainTreePrefab != null)
+            {
+                CreateDecoration(mainTreePrefab, stage.transform, new Vector3(7, 0, 7), Vector3.one);
+                CreateDecoration(mainTreePrefab, stage.transform, new Vector3(-7, 0, -7), Vector3.one);
+            }
+            if (mainBushPrefab != null)
+            {
+                CreateDecoration(mainBushPrefab, stage.transform, new Vector3(0, 0, 8), Vector3.one * 1.5f);
+                CreateDecoration(mainBushPrefab, stage.transform, new Vector3(0, 0, -8), Vector3.one * 1.5f);
+            }
+
+            stage.AddComponent<FallOutHandler>();
 
             // 5. Setup Sword for Player
             GameObject sword = SetupSword("VR_Sword_Player", new Vector3(0.3f, 1f, 0.3f));
             
             // 6. Setup Enemy
-            GameObject enemy = GameObject.Find("Training_Dummy");
-            if (enemy == null)
-            {
-                enemy = new GameObject("Training_Dummy");
-                enemy.tag = "Enemy";
-                enemy.transform.position = new Vector3(0, 0, 3);
-                
-                GameObject knightModel = AssetDatabase.LoadAssetAtPath<GameObject>(KNIGHT_MODEL_PATH);
-                if (knightModel != null)
-                {
-                    GameObject modelInstance = (GameObject)PrefabUtility.InstantiatePrefab(knightModel);
-                    modelInstance.transform.SetParent(enemy.transform, false);
-                }
-                else
-                {
-                    // Fallback to capsule
-                    GameObject capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                    capsule.transform.SetParent(enemy.transform, false);
-                    capsule.transform.localPosition = new Vector3(0, 1, 0);
-                }
+            GameObject oldEnemy = GameObject.Find("Training_Dummy");
+            if (oldEnemy != null) Undo.DestroyObjectImmediate(oldEnemy);
 
-                enemy.AddComponent<Rigidbody>();
-                enemy.AddComponent<FallOutHandler>();
-                enemy.AddComponent<EnemyAI>();
+            GameObject enemy = new GameObject("Training_Dummy");
+            enemy.tag = "Enemy";
+            enemy.transform.position = new Vector3(0, 0, 3);
+            enemy.transform.localScale = Vector3.one * 1.8f; // Make enemy larger to match player
                 
-                GameObject eSword = SetupSword("Enemy_Sword", new Vector3(0, 0, 0));
-                eSword.transform.SetParent(enemy.transform, false);
-                eSword.transform.localPosition = new Vector3(0.5f, 1f, 0.5f);
-                eSword.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            GameObject knightModel = AssetDatabase.LoadAssetAtPath<GameObject>(KNIGHT_MODEL_PATH);
+            if (knightModel != null)
+            {
+                GameObject modelInstance = (GameObject)PrefabUtility.InstantiatePrefab(knightModel);
+                modelInstance.transform.SetParent(enemy.transform, false);
             }
+            else
+            {
+                // Fallback to capsule
+                GameObject capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                capsule.transform.SetParent(enemy.transform, false);
+                capsule.transform.localPosition = new Vector3(0, 1, 0);
+            }
+
+            enemy.AddComponent<Rigidbody>();
+            enemy.AddComponent<FallOutHandler>();
+            enemy.AddComponent<EnemyAI>();
+            
+            GameObject eSword = SetupSword("Enemy_Sword", new Vector3(0, 0, 0));
+            eSword.transform.SetParent(enemy.transform, false);
+            eSword.transform.localPosition = new Vector3(0.5f, 0.8f, 0.5f); // Adjusted height for larger enemy
+            eSword.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            eSword.transform.localScale = Vector3.one * 0.6f; // Sword scale relative to enemy
 
             Debug.Log("AntiGravity VR Game Setup Complete!");
         }
@@ -223,6 +336,30 @@ namespace AntiGravity.Editor
                 // Use reflection to assign fields to WristGaugeUI
                 var fFill = typeof(UI.WristGaugeUI).GetField("fillImage", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 if (fFill != null) fFill.SetValue(wristUI, fillImg);
+            }
+        }
+
+        private static void CreateDecoration(GameObject prefab, Transform parent, Vector3 pos, Vector3 scale)
+        {
+            GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            instance.transform.SetParent(parent, false);
+            instance.transform.localPosition = pos;
+            instance.transform.localScale = scale;
+            instance.transform.localRotation = Quaternion.Euler(Random.Range(-10, 10), Random.Range(0, 360), Random.Range(-10, 10));
+            
+            AddCollidersRecursively(instance);
+        }
+
+        private static void AddCollidersRecursively(GameObject target)
+        {
+            foreach (var meshFilter in target.GetComponentsInChildren<MeshFilter>())
+            {
+                GameObject go = meshFilter.gameObject;
+                if (go.GetComponent<Collider>() == null)
+                {
+                    var mc = go.AddComponent<MeshCollider>();
+                    mc.convex = true;
+                }
             }
         }
     }
