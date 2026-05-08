@@ -1,5 +1,8 @@
 using UnityEngine;
 using UnityEditor;
+using UnityEditor.Animations;
+using UnityEngine.UI;
+using TMPro;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 namespace AntiGravity.Editor
@@ -18,6 +21,14 @@ namespace AntiGravity.Editor
         private const string SMALL_ROCK_PREFAB_PATH = "Assets/Low_Poly_Nature_Pack_Lite/Prefabs/Stones/Stone_5_moss.prefab";
         private const string TREE_PREFAB_PATH = "Assets/Low_Poly_Nature_Pack_Lite/Prefabs/Trees/Tree_01_summer.prefab";
         private const string BUSH_PREFAB_PATH = "Assets/Low_Poly_Nature_Pack_Lite/Prefabs/Bushes/Bush_11_summer.prefab";
+        private const string ANIM_CONTROLLER_PATH = "Assets/AntiGravity/KnightController.controller";
+        
+        private const string IDLE_ANIM_PATH = "Assets/Toon_RTS_demo/animations/WK_heavy_infantry_05_combat_idle.FBX";
+        private const string WALK_ANIM_PATH = "Assets/Toon_RTS_demo/animations/WK_heavy_infantry_06_combat_walk.FBX";
+        private const string ATTACK_ANIM_PATH = "Assets/Toon_RTS_demo/animations/WK_heavy_infantry_08_attack_B.FBX";
+
+        private const string UI_CIRCLE_OUTLINE = "Assets/VRTemplateAssets/Sprites/UI/Circle_60x60 Outline.png";
+        private const string UI_CIRCLE_FILL = "Assets/VRTemplateAssets/Sprites/UI/CircleMask.png";
 
         [MenuItem("AntiGravity/Create VR Game Scene")]
         public static void CreateVRGame()
@@ -216,38 +227,60 @@ namespace AntiGravity.Editor
             // 5. Setup Sword for Player
             GameObject sword = SetupSword("VR_Sword_Player", new Vector3(0.3f, 1f, 0.3f));
             
-            // 6. Setup Enemy
-            GameObject oldEnemy = GameObject.Find("Training_Dummy");
-            if (oldEnemy != null) Undo.DestroyObjectImmediate(oldEnemy);
-
-            GameObject enemy = new GameObject("Training_Dummy");
-            enemy.tag = "Enemy";
-            enemy.transform.position = new Vector3(0, 0, 3);
-            enemy.transform.localScale = Vector3.one * 1.8f; // Make enemy larger to match player
-                
-            GameObject knightModel = AssetDatabase.LoadAssetAtPath<GameObject>(KNIGHT_MODEL_PATH);
-            if (knightModel != null)
+            // 6. Setup Enemy (Knight as the root object)
+            GameObject[] oldEnemies = GameObject.FindObjectsOfType<GameObject>();
+            foreach (var go in oldEnemies)
             {
-                GameObject modelInstance = (GameObject)PrefabUtility.InstantiatePrefab(knightModel);
-                modelInstance.transform.SetParent(enemy.transform, false);
+                if (go.name == "Training_Dummy" || go.name == "Enemy_Knight" || go.tag == "Enemy")
+                {
+                    Undo.DestroyObjectImmediate(go);
+                }
+            }
+
+            GameObject knightPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(KNIGHT_MODEL_PATH);
+            GameObject enemy;
+            if (knightPrefab != null)
+            {
+                enemy = (GameObject)PrefabUtility.InstantiatePrefab(knightPrefab);
+                enemy.name = "Enemy_Knight";
             }
             else
             {
-                // Fallback to capsule
-                GameObject capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                capsule.transform.SetParent(enemy.transform, false);
-                capsule.transform.localPosition = new Vector3(0, 1, 0);
+                enemy = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                enemy.name = "Enemy_Knight";
+                enemy.transform.localPosition = new Vector3(0, 1, 0);
             }
 
-            enemy.AddComponent<Rigidbody>();
+            enemy.tag = "Enemy";
+            enemy.transform.position = new Vector3(0, 0, 3);
+            enemy.transform.localScale = Vector3.one * 1.8f;
+
+            var rb = enemy.GetComponent<Rigidbody>();
+            if (rb == null) rb = enemy.AddComponent<Rigidbody>();
+            rb.mass = 10f;
+            rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+
+            if (enemy.GetComponent<Collider>() == null)
+            {
+                var cap = enemy.AddComponent<CapsuleCollider>();
+                cap.center = new Vector3(0, 1, 0);
+                cap.height = 2f;
+                cap.radius = 0.3f;
+            }
+
             enemy.AddComponent<FallOutHandler>();
             enemy.AddComponent<EnemyAI>();
             
+            // Setup Animator
+            var animator = enemy.GetComponent<Animator>();
+            if (animator == null) animator = enemy.AddComponent<Animator>();
+            animator.runtimeAnimatorController = SetupAnimatorController();
+            
             GameObject eSword = SetupSword("Enemy_Sword", new Vector3(0, 0, 0));
             eSword.transform.SetParent(enemy.transform, false);
-            eSword.transform.localPosition = new Vector3(0.5f, 0.8f, 0.5f); // Adjusted height for larger enemy
+            eSword.transform.localPosition = new Vector3(0.5f, 1.0f, 0.5f); 
             eSword.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            eSword.transform.localScale = Vector3.one * 0.6f; // Sword scale relative to enemy
+            eSword.transform.localScale = Vector3.one * 0.6f;
 
             Debug.Log("AntiGravity VR Game Setup Complete!");
         }
@@ -255,89 +288,73 @@ namespace AntiGravity.Editor
         private static GameObject SetupSword(string name, Vector3 pos)
         {
             GameObject sword = GameObject.Find(name);
-            if (sword == null)
-            {
-                sword = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                sword.name = name;
-                sword.tag = "Sword";
-                sword.transform.position = pos;
-                sword.transform.localScale = new Vector3(0.05f, 0.05f, 1.0f);
-                
-                var rb = sword.GetComponent<Rigidbody>();
-                if (rb == null) rb = sword.AddComponent<Rigidbody>();
-                rb.mass = 2f;
-                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            if (sword != null) Undo.DestroyObjectImmediate(sword);
 
-                var grab = sword.AddComponent<XRGrabInteractable>();
-                grab.movementType = XRBaseInteractable.MovementType.VelocityTracking;
-                
-                var swordComp = sword.AddComponent<Sword>();
-                sword.AddComponent<SwordVisuals>();
+            sword = new GameObject(name);
+            sword.tag = "Sword";
+            sword.transform.position = pos;
+            
+            // 1. Physics setup
+            var rb = sword.AddComponent<Rigidbody>();
+            rb.mass = 2f;
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
-                // Setup Audio
-                var source = sword.AddComponent<AudioSource>();
-                source.playOnAwake = false;
-                source.spatialBlend = 1.0f; // 3D Sound
+            var grab = sword.AddComponent<XRGrabInteractable>();
+            grab.movementType = XRBaseInteractable.MovementType.VelocityTracking;
+            
+            var swordComp = sword.AddComponent<Sword>();
+            sword.AddComponent<SwordVisuals>();
 
-                var fSource = typeof(Sword).GetField("audioSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var fClash = typeof(Sword).GetField("clashClip", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var fIssen = typeof(Sword).GetField("issenClip", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var fSpark = typeof(Sword).GetField("sparkPrefab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            // 2. Visual Parts
+            // Hilt (柄)
+            GameObject hilt = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            hilt.name = "Hilt";
+            hilt.transform.SetParent(sword.transform, false);
+            hilt.transform.localPosition = new Vector3(0, 0, -0.4f);
+            hilt.transform.localScale = new Vector3(0.03f, 0.15f, 0.03f);
+            hilt.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            hilt.GetComponent<Renderer>().material.color = new Color(0.2f, 0.2f, 0.2f);
+            Object.DestroyImmediate(hilt.GetComponent<Collider>());
 
-                if (fSource != null) fSource.SetValue(swordComp, source);
-                if (fClash != null) fClash.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<AudioClip>(CLASH_SFX_PATH));
-                if (fIssen != null) fIssen.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<AudioClip>(ISSEN_SFX_PATH));
-                if (fSpark != null) fSpark.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<GameObject>(SPARK_VFX_PATH));
-                
-                // Add a simple visual cue for the blade
-                GameObject blade = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                blade.name = "BladeVisual";
-                blade.transform.SetParent(sword.transform, false);
-                blade.transform.localScale = new Vector3(0.8f, 0.2f, 1.0f);
-                Object.DestroyImmediate(blade.GetComponent<BoxCollider>());
-            }
+            // Guard (鍔)
+            GameObject guard = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            guard.name = "Guard";
+            guard.transform.SetParent(sword.transform, false);
+            guard.transform.localPosition = new Vector3(0, 0, -0.2f);
+            guard.transform.localScale = new Vector3(0.15f, 0.03f, 0.05f);
+            guard.GetComponent<Renderer>().material.color = new Color(0.3f, 0.3f, 0.3f);
+            Object.DestroyImmediate(guard.GetComponent<Collider>());
+
+            // Blade (刃)
+            GameObject blade = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            blade.name = "Blade";
+            blade.transform.SetParent(sword.transform, false);
+            blade.transform.localPosition = new Vector3(0, 0, 0.3f);
+            blade.transform.localScale = new Vector3(0.08f, 0.01f, 1.0f);
+            blade.GetComponent<Renderer>().material.color = new Color(0.8f, 0.8f, 0.9f);
+            
+            // The Collider should be on the blade for clashing
+            var col = blade.GetComponent<BoxCollider>();
+            if (col == null) col = blade.AddComponent<BoxCollider>();
+
+            // 3. Audio & Effects
+            var source = sword.AddComponent<AudioSource>();
+            source.playOnAwake = false;
+            source.spatialBlend = 1.0f;
+
+            var fSource = typeof(Sword).GetField("audioSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var fClash = typeof(Sword).GetField("clashClip", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var fIssen = typeof(Sword).GetField("issenClip", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var fSpark = typeof(Sword).GetField("sparkPrefab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+            if (fSource != null) fSource.SetValue(swordComp, source);
+            if (fClash != null) fClash.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<AudioClip>(CLASH_SFX_PATH));
+            if (fIssen != null) fIssen.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<AudioClip>(ISSEN_SFX_PATH));
+            if (fSpark != null) fSpark.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<GameObject>(SPARK_VFX_PATH));
+
             return sword;
         }
 
-        private static void SetupWristUI(GameObject xrOrigin)
-        {
-            Transform leftHand = xrOrigin.transform.Find("Camera Offset/Left Controller");
-            if (leftHand == null) return;
-
-            GameObject wristCanvas = GameObject.Find("WristGaugeCanvas");
-            if (wristCanvas == null)
-            {
-                wristCanvas = new GameObject("WristGaugeCanvas");
-                wristCanvas.transform.SetParent(leftHand, false);
-                wristCanvas.transform.localPosition = new Vector3(0, 0.05f, 0.1f);
-                wristCanvas.transform.localRotation = Quaternion.Euler(90, 0, 0);
-                wristCanvas.transform.localScale = Vector3.one * 0.001f;
-
-                Canvas canvas = wristCanvas.AddComponent<Canvas>();
-                canvas.renderMode = RenderMode.WorldSpace;
-                wristCanvas.AddComponent<UnityEngine.UI.CanvasScaler>();
-                
-                GameObject bg = new GameObject("Background");
-                bg.transform.SetParent(wristCanvas.transform, false);
-                var bgImg = bg.AddComponent<UnityEngine.UI.Image>();
-                bgImg.color = new Color(0, 0, 0, 0.5f);
-                bgImg.rectTransform.sizeDelta = new Vector2(200, 50);
-
-                GameObject fill = new GameObject("Fill");
-                fill.transform.SetParent(wristCanvas.transform, false);
-                var fillImg = fill.AddComponent<UnityEngine.UI.Image>();
-                fillImg.color = Color.cyan;
-                fillImg.rectTransform.sizeDelta = new Vector2(200, 50);
-                fillImg.type = UnityEngine.UI.Image.Type.Filled;
-                fillImg.fillMethod = UnityEngine.UI.Image.FillMethod.Horizontal;
-
-                var wristUI = wristCanvas.AddComponent<UI.WristGaugeUI>();
-                
-                // Use reflection to assign fields to WristGaugeUI
-                var fFill = typeof(UI.WristGaugeUI).GetField("fillImage", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (fFill != null) fFill.SetValue(wristUI, fillImg);
-            }
-        }
 
         private static void CreateDecoration(GameObject prefab, Transform parent, Vector3 pos, Vector3 scale)
         {
@@ -348,6 +365,122 @@ namespace AntiGravity.Editor
             instance.transform.localRotation = Quaternion.Euler(Random.Range(-10, 10), Random.Range(0, 360), Random.Range(-10, 10));
             
             AddCollidersRecursively(instance);
+        }
+
+        private static void SetupWristUI(GameObject xrOrigin)
+        {
+            // Find Left Hand for Wrist UI
+            Transform leftHand = xrOrigin.transform.Find("Camera Offset/Left Controller");
+            if (leftHand == null) return;
+
+            GameObject canvasObj = new GameObject("WristCanvas");
+            canvasObj.transform.SetParent(leftHand, false);
+            canvasObj.transform.localPosition = new Vector3(0, 0.05f, 0.1f);
+            canvasObj.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            canvasObj.transform.localScale = Vector3.one * 0.001f;
+
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvasObj.AddComponent<CanvasScaler>();
+            canvasObj.AddComponent<GraphicRaycaster>();
+
+            // 1. Gauge Background
+            GameObject bgObj = new GameObject("Background");
+            bgObj.transform.SetParent(canvasObj.transform, false);
+            var bgImg = bgObj.AddComponent<Image>();
+            bgImg.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(UI_CIRCLE_OUTLINE);
+            bgImg.color = new Color(1, 1, 1, 0.5f);
+            bgObj.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 100);
+
+            // 2. Gauge Fill
+            GameObject fillObj = new GameObject("Fill");
+            fillObj.transform.SetParent(canvasObj.transform, false);
+            var fillImg = fillObj.AddComponent<Image>();
+            fillImg.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(UI_CIRCLE_FILL);
+            fillImg.type = Image.Type.Filled;
+            fillImg.fillMethod = Image.FillMethod.Radial360;
+            fillImg.fillOrigin = (int)Image.Origin360.Top;
+            fillImg.fillAmount = 0f;
+            fillObj.GetComponent<RectTransform>().sizeDelta = new Vector2(90, 90);
+
+            // 3. Status Text
+            GameObject textObj = new GameObject("StatusText");
+            textObj.transform.SetParent(canvasObj.transform, false);
+            textObj.transform.localPosition = new Vector3(0, -60, 0);
+            var tmp = textObj.AddComponent<TextMeshProUGUI>();
+            tmp.text = "READY";
+            tmp.fontSize = 24;
+            tmp.alignment = TextAlignmentOptions.Center;
+            textObj.GetComponent<RectTransform>().sizeDelta = new Vector2(200, 50);
+
+            // 4. Link with Logic
+            var uiComp = canvasObj.AddComponent<SwordGaugeUI>();
+            
+            var fFill = typeof(SwordGaugeUI).GetField("fillImage", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var fText = typeof(SwordGaugeUI).GetField("statusText", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            
+            if (fFill != null) fFill.SetValue(uiComp, fillImg);
+            if (fText != null) fText.SetValue(uiComp, tmp);
+        }
+
+        private static RuntimeAnimatorController SetupAnimatorController()
+        {
+            AnimatorController controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(ANIM_CONTROLLER_PATH);
+            if (controller == null)
+            {
+                controller = AnimatorController.CreateAnimatorControllerAtPath(ANIM_CONTROLLER_PATH);
+                controller.AddParameter("IsWalking", AnimatorControllerParameterType.Bool);
+                controller.AddParameter("Attack", AnimatorControllerParameterType.Trigger);
+
+                var rootStateMachine = controller.layers[0].stateMachine;
+
+                // Load clips
+                AnimationClip idleClip = GetClipFromFBX(IDLE_ANIM_PATH);
+                AnimationClip walkClip = GetClipFromFBX(WALK_ANIM_PATH);
+                AnimationClip attackClip = GetClipFromFBX(ATTACK_ANIM_PATH);
+
+                var idleState = rootStateMachine.AddState("Idle");
+                idleState.motion = idleClip;
+
+                var walkState = rootStateMachine.AddState("Walk");
+                walkState.motion = walkClip;
+
+                var attackState = rootStateMachine.AddState("Attack");
+                attackState.motion = attackClip;
+
+                // Transitions
+                var toWalk = idleState.AddTransition(walkState);
+                toWalk.AddCondition(AnimatorConditionMode.If, 0, "IsWalking");
+
+                var toIdle = walkState.AddTransition(idleState);
+                toIdle.AddCondition(AnimatorConditionMode.IfNot, 0, "IsWalking");
+
+                var toAttackFromIdle = idleState.AddTransition(attackState);
+                toAttackFromIdle.AddCondition(AnimatorConditionMode.If, 0, "Attack");
+
+                var toAttackFromWalk = walkState.AddTransition(attackState);
+                toAttackFromWalk.AddCondition(AnimatorConditionMode.If, 0, "Attack");
+
+                var backToIdle = attackState.AddTransition(idleState);
+                backToIdle.hasExitTime = true;
+                backToIdle.exitTime = 0.9f;
+
+                Debug.Log("Created Knight Animator Controller.");
+            }
+            return controller;
+        }
+
+        private static AnimationClip GetClipFromFBX(string path)
+        {
+            var assets = AssetDatabase.LoadAllAssetsAtPath(path);
+            foreach (var asset in assets)
+            {
+                if (asset is AnimationClip && !asset.name.Contains("__preview__"))
+                {
+                    return (AnimationClip)asset;
+                }
+            }
+            return null;
         }
 
         private static void AddCollidersRecursively(GameObject target)

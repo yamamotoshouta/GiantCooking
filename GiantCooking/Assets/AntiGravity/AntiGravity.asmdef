@@ -3,7 +3,8 @@
     "rootNamespace": "AntiGravity",
     "references": [
         "Unity.XR.Interaction.Toolkit",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

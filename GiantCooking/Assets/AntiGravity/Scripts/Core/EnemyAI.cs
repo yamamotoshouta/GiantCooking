@@ -13,14 +13,18 @@ namespace AntiGravity
         private float nextSwingTime;
         private Rigidbody rb;
         private Transform swordHand;
+        private Animator animator;
+
+        private static readonly int IsWalking = Animator.StringToHash("IsWalking");
+        private static readonly int Attack = Animator.StringToHash("Attack");
 
         private void Start()
         {
             rb = GetComponent<Rigidbody>();
+            animator = GetComponent<Animator>();
             GameObject playerObj = GameObject.Find("XR Origin (XR Rig)");
             if (playerObj != null) player = playerObj.transform;
             
-            // Find the sword holder (the primitive or model part)
             swordHand = transform.Find("Enemy_Sword");
         }
 
@@ -40,9 +44,13 @@ namespace AntiGravity
                 // Rotate to face player
                 Quaternion lookRot = Quaternion.LookRotation(moveDir);
                 rb.MoveRotation(Quaternion.Slerp(rb.rotation, lookRot, 0.1f));
+
+                if (animator != null) animator.SetBool(IsWalking, true);
             }
             else
             {
+                if (animator != null) animator.SetBool(IsWalking, false);
+
                 // Attack range
                 if (Time.time > nextSwingTime)
                 {
@@ -54,15 +62,14 @@ namespace AntiGravity
 
         private void PerformSwing()
         {
+            if (animator != null) animator.SetTrigger(Attack);
+
             if (swordHand == null) return;
             
-            // Simple physics-based swing: Apply torque or rotate the holder
             Rigidbody swordRb = swordHand.GetComponent<Rigidbody>();
             if (swordRb != null)
             {
-                // Push the sword forward/sideways
-                swordRb.AddForce(transform.forward * 10f + transform.right * 5f, ForceMode.Impulse);
-                Debug.Log("Enemy Swings!");
+                swordRb.AddForce(transform.forward * 12f + transform.right * 4f, ForceMode.Impulse);
             }
         }
     }
