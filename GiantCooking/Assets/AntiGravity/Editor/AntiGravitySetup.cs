@@ -30,7 +30,8 @@ namespace AntiGravity.Editor
         
         private const string IDLE_ANIM_PATH = "Assets/Toon_RTS_demo/animations/WK_heavy_infantry_05_combat_idle.FBX";
         private const string WALK_ANIM_PATH = "Assets/Toon_RTS_demo/animations/WK_heavy_infantry_06_combat_walk.FBX";
-        private const string ATTACK_ANIM_PATH = "Assets/Toon_RTS_demo/animations/WK_heavy_infantry_08_attack_B.FBX";
+        private const string ATTACK_ANIM_PATH = "Assets/Kevin Iglesias/Human Animations/Animations/Male/Combat/1H/HumanM@Attack1H01_R.fbx";
+        private const string RECOIL_ANIM_PATH = "Assets/Kevin Iglesias/Human Animations/Animations/Male/Combat/HumanM@CombatDamage01.fbx";
 
         private const string UI_CIRCLE_OUTLINE = "Assets/VRTemplateAssets/Sprites/UI/Circle_60x60 Outline.png";
         private const string UI_CIRCLE_FILL = "Assets/VRTemplateAssets/Sprites/UI/CircleMask.png";
@@ -619,6 +620,7 @@ namespace AntiGravity.Editor
                 AnimationClip idleClip = GetClipFromFBX(IDLE_ANIM_PATH);
                 AnimationClip walkClip = GetClipFromFBX(WALK_ANIM_PATH);
                 AnimationClip attackClip = GetClipFromFBX(ATTACK_ANIM_PATH);
+                AnimationClip recoilClip = GetClipFromFBX(RECOIL_ANIM_PATH);
 
                 var idleState = rootStateMachine.AddState("Idle");
                 idleState.motion = idleClip;
@@ -630,6 +632,7 @@ namespace AntiGravity.Editor
                 attackState.motion = attackClip;
                 
                 var recoilState = rootStateMachine.AddState("Recoil");
+                recoilState.motion = recoilClip;
 
                 idleState.AddTransition(walkState).AddCondition(AnimatorConditionMode.If, 0, "IsWalking");
                 walkState.AddTransition(idleState).AddCondition(AnimatorConditionMode.IfNot, 0, "IsWalking");
