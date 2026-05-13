@@ -5,6 +5,7 @@ using UnityEngine.UI;
 using TMPro;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
 using System.Reflection;
+using AntiGravity;
 
 namespace AntiGravity.Editor
 {
@@ -576,11 +577,9 @@ namespace AntiGravity.Editor
             tmp.alignment = TextAlignmentOptions.Center;
             textObj.GetComponent<RectTransform>().sizeDelta = new Vector2(200, 50);
 
-            var uiComp = canvasObj.AddComponent<SwordGaugeUI>();
-            var fFill = typeof(SwordGaugeUI).GetField("fillImage", BindingFlags.NonPublic | BindingFlags.Instance);
-            var fText = typeof(SwordGaugeUI).GetField("statusText", BindingFlags.NonPublic | BindingFlags.Instance);
+            var uiComp = canvasObj.AddComponent<GaugeUI>();
+            var fFill = typeof(GaugeUI).GetField("gaugeFill", BindingFlags.NonPublic | BindingFlags.Instance);
             if (fFill != null) fFill.SetValue(uiComp, fillImg);
-            if (fText != null) fText.SetValue(uiComp, tmp);
         }
 
         private static RuntimeAnimatorController SetupAnimatorController()
