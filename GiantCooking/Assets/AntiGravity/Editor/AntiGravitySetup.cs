@@ -66,42 +66,44 @@ namespace AntiGravity.Editor
             foreach (var comp in allComponents)
             {
                 string typeName = comp.GetType().Name;
-                if (typeName == "Volume" || typeName == "FastSky_Sun_Color")
+                if (typeName == "Volume" || typeName == "FastSky_Sun_Color" || typeName == "FastSky_Ambience")
                 {
                     comp.enabled = false;
+                }
+            }
+
+            // Forcefully stop and destroy any existing looping ambient AudioSources
+            AudioSource[] allAudio = GameObject.FindObjectsOfType<AudioSource>();
+            foreach (var audio in allAudio)
+            {
+                if (audio.loop || (audio.clip != null && (audio.clip.name.Contains("Thunder") || audio.clip.name.Contains("Electricity"))))
+                {
+                    audio.Stop();
+                    if (!EditorApplication.isPlaying) Undo.DestroyObjectImmediate(audio.gameObject);
                 }
             }
 
             DynamicGI.UpdateEnvironment();
 
             GameObject gm = GameObject.Find("AntiGravity_GameManager");
-            if (gm == null)
-            {
-                gm = new GameObject("AntiGravity_GameManager");
-                var manager = gm.AddComponent<GameManager>();
-                gm.AddComponent<AntiGravity.System.TimeManager>(); // Add TimeManager
-                
-                var source = gm.AddComponent<AudioSource>();
-                source.playOnAwake = false;
-                source.spatialBlend = 0f; 
-                
-                var propSource = typeof(GameManager).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
-                var propClip = typeof(GameManager).GetField("gaugeMaxClip", BindingFlags.NonPublic | BindingFlags.Instance);
-                
-                if (propSource != null) propSource.SetValue(manager, source);
-                if (propClip != null) propClip.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(GAUGE_MAX_SFX_PATH));
+            if (gm != null) Undo.DestroyObjectImmediate(gm); // Force recreate to clear old settings
+            
+            gm = new GameObject("AntiGravity_GameManager");
+            var manager = gm.AddComponent<GameManager>();
+            gm.AddComponent<AntiGravity.System.TimeManager>(); 
+            
+            var source = gm.AddComponent<AudioSource>();
+            source.playOnAwake = false;
+            source.spatialBlend = 0f; 
+            
+            var propSource = typeof(GameManager).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
+            var propClip = typeof(GameManager).GetField("gaugeMaxClip", BindingFlags.NonPublic | BindingFlags.Instance);
+            
+            if (propSource != null) propSource.SetValue(manager, source);
+            if (propClip != null) propClip.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(GAUGE_MAX_SFX_PATH));
 
-                // Ambient Sound
-                var ambientSource = gm.AddComponent<AudioSource>();
-                ambientSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(AMBIENT_SFX_PATH);
-                ambientSource.loop = true;
-                ambientSource.playOnAwake = true;
-                ambientSource.volume = 0.3f;
-                ambientSource.spatialBlend = 0f;
-                ambientSource.Play();
-                
-                Debug.Log("Created GameManager and assigned Audio.");
-            }
+            Debug.Log("Created GameManager and assigned Audio.");
+
 
             // 1. Setup XR Origin
             GameObject xrOrigin = GameObject.Find("XR Origin (XR Rig)");
@@ -256,11 +258,13 @@ namespace AntiGravity.Editor
             }
 
             enemy.tag = "Enemy";
-            enemy.transform.position = new Vector3(0, 0, 3);
+            enemy.transform.position = new Vector3(0, 0.5f, 3); 
             enemy.transform.localScale = Vector3.one * 1.8f;
 
             var rb = enemy.GetComponent<Rigidbody>();
             if (rb == null) rb = enemy.AddComponent<Rigidbody>();
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
             rb.mass = 10f;
             rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
 
@@ -289,34 +293,52 @@ namespace AntiGravity.Editor
             footstepSource.spatialize = true;
             footstepSource.minDistance = 1f;
             footstepSource.maxDistance = 10f;
-            footstepSource.Play();
+            // footstepSource.Play(); // Disabled to ensure quiet environment
+
             
             var animator = enemy.GetComponent<Animator>();
             if (animator == null) animator = enemy.AddComponent<Animator>();
             animator.runtimeAnimatorController = SetupAnimatorController();
             
-            GameObject eSword = SetupSword("Enemy_Sword", new Vector3(0, 0, 0));
+            // Find the existing sword in the model hierarchy
+            Transform existingSword = enemy.transform.FindRecursive("Sword");
+            if (existingSword == null) existingSword = enemy.transform.FindRecursive("weapon");
             
-            // Ignore collisions between Enemy and their own sword
-            foreach (var col in enemy.GetComponentsInChildren<Collider>())
+            if (existingSword != null)
             {
-                foreach (var sCol in eSword.GetComponentsInChildren<Collider>())
-                {
-                    Physics.IgnoreCollision(col, sCol);
-                }
-            }
-            
-            Transform hand = enemy.transform.FindRecursive("RightHand");
-            if (hand == null) hand = enemy.transform.FindRecursive("hand_r");
-            if (hand == null) hand = enemy.transform.FindRecursive("Right_Hand");
-            
-            eSword.transform.SetParent(hand != null ? hand : enemy.transform, false);
-            eSword.transform.localPosition = new Vector3(0, 0.15f, 0);
-            eSword.transform.localRotation = Quaternion.Euler(0, 90, 90);
-            eSword.transform.localScale = Vector3.one * 0.6f;
+                existingSword.gameObject.name = "Enemy_Sword"; // Rename to match EnemyAI's search
+                existingSword.gameObject.tag = "Sword";
+                
+                // Add Sword script if not present
+                var swordComp = existingSword.gameObject.GetComponent<Sword>();
+                if (swordComp == null) swordComp = existingSword.gameObject.AddComponent<Sword>();
 
-            var eRb = eSword.GetComponent<Rigidbody>();
-            if (eRb != null) eRb.isKinematic = true;
+                // Add Trigger Collider for safety (prevents flying bug)
+                var boxCol = existingSword.gameObject.GetComponent<BoxCollider>();
+                if (boxCol == null) boxCol = existingSword.gameObject.AddComponent<BoxCollider>();
+                boxCol.isTrigger = true; 
+
+                // Setup Sword references (Audio, etc.)
+                var bladeRenderer = existingSword.GetComponent<Renderer>();
+                var swordSource = existingSword.gameObject.GetComponent<AudioSource>();
+                if (swordSource == null) swordSource = existingSword.gameObject.AddComponent<AudioSource>();
+                swordSource.playOnAwake = false;
+                swordSource.spatialBlend = 1.0f;
+
+                var fSource = typeof(Sword).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
+                var fClash = typeof(Sword).GetField("clashClip", BindingFlags.NonPublic | BindingFlags.Instance);
+                var fRenderer = typeof(Sword).GetField("swordRenderer", BindingFlags.NonPublic | BindingFlags.Instance);
+
+                if (fSource != null) fSource.SetValue(swordComp, swordSource);
+                if (fClash != null) fClash.SetValue(swordComp, AssetDatabase.LoadAssetAtPath<AudioClip>(CLASH_SFX_PATH));
+                if (fRenderer != null) fRenderer.SetValue(swordComp, bladeRenderer);
+
+                Debug.Log("Attached Sword logic to existing model: " + existingSword.name);
+            }
+            else
+            {
+                Debug.LogWarning("Existing sword not found in enemy model.");
+            }
 
             // 6. Setup UI
             SetupGameUI();

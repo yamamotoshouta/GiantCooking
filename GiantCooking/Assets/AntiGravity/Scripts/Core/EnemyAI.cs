@@ -94,7 +94,7 @@ namespace AntiGravity
             if (swordHand == null) return;
             
             Rigidbody swordRb = swordHand.GetComponent<Rigidbody>();
-            if (swordRb != null)
+            if (swordRb != null && !swordRb.isKinematic)
             {
                 swordRb.AddForce(transform.forward * 12f + transform.right * 4f, ForceMode.Impulse);
             }

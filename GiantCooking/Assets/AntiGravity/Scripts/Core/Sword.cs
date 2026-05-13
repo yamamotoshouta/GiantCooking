@@ -81,43 +81,47 @@ namespace AntiGravity
 
         private void OnCollisionEnter(Collision collision)
         {
-            if (collision.gameObject.CompareTag("Sword"))
+            HandleHit(collision.gameObject, collision.contacts.Length > 0 ? collision.contacts[0].point : transform.position);
+        }
+
+        private void OnTriggerEnter(Collider other)
+        {
+            // For triggers, we use the closest point or the object position as a contact point
+            HandleHit(other.gameObject, other.ClosestPointOnBounds(transform.position));
+        }
+
+        private void HandleHit(GameObject hitObj, Vector3 contactPoint)
+        {
+            if (hitObj.CompareTag("Sword"))
             {
-                HandleSwordClash(collision);
+                HandleSwordClash(hitObj, contactPoint);
             }
-            else if (collision.gameObject.CompareTag("Enemy"))
+            else if (hitObj.CompareTag("Enemy"))
             {
-                HandleEnemyHit(collision);
+                HandleEnemyHit(hitObj, contactPoint);
             }
         }
 
-        private void HandleSwordClash(Collision collision)
+        private void HandleSwordClash(GameObject otherSword, Vector3 contactPoint)
         {
-            // Calculate relative velocity for dynamic haptics
-            float relativeVel = collision.relativeVelocity.magnitude;
-            float intensity = Mathf.Clamp(relativeVel / 10f, minHapticIntensity, maxHapticIntensity);
-
             // Calculate bounce direction
-            Vector3 bounceDir = (transform.position - collision.contacts[0].point).normalized;
-            rb.AddForce(bounceDir * bounceForce, ForceMode.Impulse);
+            Vector3 bounceDir = (transform.position - contactPoint).normalized;
+            if (rb != null) rb.AddForce(bounceDir * bounceForce, ForceMode.Impulse);
 
             // Trigger Haptics
-            TriggerHaptics(intensity);
+            TriggerHaptics(0.5f);
 
-            // Hit Stop for crunchiness
+            // Hit Stop
             if (AntiGravity.System.TimeManager.Instance != null)
             {
                 AntiGravity.System.TimeManager.Instance.DoHitStop(0.05f);
             }
 
-            // Add to Gauge (only if not hitting an invincible enemy)
-            bool isEnemySword = false;
-            EnemyAI enemy = collision.gameObject.GetComponentInParent<EnemyAI>();
+            // Add to Gauge
+            EnemyAI enemy = otherSword.GetComponentInParent<EnemyAI>();
             if (enemy != null)
             {
-                isEnemySword = true;
-                if (enemy.IsInvincible) return; // Ignore if already recoiling
-                
+                if (enemy.IsInvincible) return;
                 enemy.TriggerRecoil();
             }
 
@@ -134,35 +138,30 @@ namespace AntiGravity
 
             if (sparkPrefab != null)
             {
-                Instantiate(sparkPrefab, collision.contacts[0].point, Quaternion.identity);
+                Instantiate(sparkPrefab, contactPoint, Quaternion.identity);
             }
-
-            Debug.Log($"Sword Clash! Intensity: {intensity}");
         }
 
-        private void HandleEnemyHit(Collision collision)
+        private void HandleEnemyHit(GameObject enemyObj, Vector3 contactPoint)
         {
-            EnemyAI enemy = collision.gameObject.GetComponent<EnemyAI>();
+            EnemyAI enemy = enemyObj.GetComponent<EnemyAI>();
             if (enemy != null && enemy.IsInvincible) return;
 
             if (GameManager.Instance != null && GameManager.Instance.IsIssenActive)
             {
-                // Issen blowback
-                Rigidbody enemyRb = collision.gameObject.GetComponent<Rigidbody>();
+                Rigidbody enemyRb = enemyObj.GetComponent<Rigidbody>();
                 if (enemyRb != null)
                 {
-                    Vector3 blowbackDir = (collision.transform.position - transform.position).normalized;
-                    blowbackDir.y = 0.2f; // Slight upward lift
+                    Vector3 blowbackDir = (enemyObj.transform.position - transform.position).normalized;
+                    blowbackDir.y = 0.2f;
                     enemyRb.AddForce(blowbackDir * 20f, ForceMode.Impulse);
                     
-                    // Play Sound
                     if (audioSource != null && issenClip != null)
                     {
                         audioSource.PlayOneShot(issenClip);
                     }
 
                     GameManager.Instance.ResetGauge();
-                    Debug.Log("Issen Blast!");
                 }
             }
         }
