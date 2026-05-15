@@ -277,10 +277,11 @@ namespace AntiGravity.Editor
             // Add Ambient Wind/Thunder Sound to Stage
             var stageAudio = stage.AddComponent<AudioSource>();
             stageAudio.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(AMBIENT_SFX_PATH);
+            stageAudio.playOnAwake = true;
             stageAudio.loop = true;
             stageAudio.spatialBlend = 0.5f; // Semi-spatial
             stageAudio.volume = 0.05f; // Much lower to prioritize BGM
-            stageAudio.Play();
+            // stageAudio.Play(); // Removed to prevent playing in Unity Editor
 
             // 5. Setup Sword for Player
             GameObject sword = SetupSword("VR_Sword_Player", new Vector3(0.3f, 1f, 0.3f));
