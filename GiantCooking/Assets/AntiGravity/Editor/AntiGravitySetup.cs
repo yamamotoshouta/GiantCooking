@@ -18,6 +18,9 @@ namespace AntiGravity.Editor
         private const string ISSEN_SFX_PATH = "Assets/Free Pack/Magic Spell_Electricity Spell_1.wav";
         private const string GAUGE_MAX_SFX_PATH = "Assets/Free Pack/Magic Spell_Simple Swoosh_6.wav";
         private const string AMBIENT_SFX_PATH = "Assets/Free Pack/Thunder strikes 30 second- Loop.wav";
+        private const string BGM_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-49.wav";
+        private const string VICTORY_BGM_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-16.wav";
+        private const string DEFEAT_BGM_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-18.wav";
         private const string FOOTSTEP_SFX_PATH = "Assets/Free Pack/Walking in ChainMail - Loop.wav";
         private const string SPARK_VFX_PATH = "Assets/UnityTechnologies/ParticlePack/EffectExamples/Weapon Effects/Prefabs/MetalImpacts.prefab";
         private const string AURA_VFX_PATH = "Assets/UnityTechnologies/ParticlePack/EffectExamples/Misc Effects/Prefabs/ElectricalSparks.prefab";
@@ -95,15 +98,31 @@ namespace AntiGravity.Editor
             
             var source = gm.AddComponent<AudioSource>();
             source.playOnAwake = false;
-            source.spatialBlend = 0f; 
-            
-            var propSource = typeof(GameManager).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
-            var propClip = typeof(GameManager).GetField("gaugeMaxClip", BindingFlags.NonPublic | BindingFlags.Instance);
-            
-            if (propSource != null) propSource.SetValue(manager, source);
-            if (propClip != null) propClip.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(GAUGE_MAX_SFX_PATH));
+            source.spatialBlend = 0f;
 
-            Debug.Log("Created GameManager and assigned Audio.");
+            var bgmSource = gm.AddComponent<AudioSource>();
+            bgmSource.playOnAwake = false;
+            bgmSource.loop = true;
+            bgmSource.spatialBlend = 0f;
+            bgmSource.volume = 0.5f;
+
+            var fAudioSource = typeof(GameManager).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fBgmSource = typeof(GameManager).GetField("bgmSource", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fMaxClip = typeof(GameManager).GetField("gaugeMaxClip", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fIssenClip = typeof(GameManager).GetField("issenActivateClip", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fPlayBgm = typeof(GameManager).GetField("playingBGM", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fVicBgm = typeof(GameManager).GetField("victoryBGM", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fDefBgm = typeof(GameManager).GetField("defeatBGM", BindingFlags.NonPublic | BindingFlags.Instance);
+            
+            if (fAudioSource != null) fAudioSource.SetValue(manager, source);
+            if (fBgmSource != null) fBgmSource.SetValue(manager, bgmSource);
+            if (fMaxClip != null) fMaxClip.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(GAUGE_MAX_SFX_PATH));
+            if (fIssenClip != null) fIssenClip.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(ISSEN_SFX_PATH));
+            if (fPlayBgm != null) fPlayBgm.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(BGM_PATH));
+            if (fVicBgm != null) fVicBgm.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(VICTORY_BGM_PATH));
+            if (fDefBgm != null) fDefBgm.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(DEFEAT_BGM_PATH));
+
+            Debug.Log("Created GameManager and assigned BGM/Audio.");
 
 
             // 1. Setup XR Origin
@@ -143,6 +162,23 @@ namespace AntiGravity.Editor
                 }
 
                 SetupWristUI(xrOrigin);
+
+                // Setup Player Head Collider for damage detection
+                Transform mainCam = xrOrigin.transform.Find("Camera Offset/Main Camera");
+                if (mainCam != null)
+                {
+                    mainCam.gameObject.tag = "MainCamera";
+                    var headCol = mainCam.gameObject.GetComponent<SphereCollider>();
+                    if (headCol == null) headCol = mainCam.gameObject.AddComponent<SphereCollider>();
+                    headCol.radius = 0.15f;
+                    headCol.isTrigger = true;
+
+                    var headRb = mainCam.gameObject.GetComponent<Rigidbody>();
+                    if (headRb == null) headRb = mainCam.gameObject.AddComponent<Rigidbody>();
+                    headRb.isKinematic = true;
+                    
+                    Debug.Log("Setup Player Head Collider and Rigidbody.");
+                }
             }
 
             // 4. Setup Stage
@@ -231,6 +267,14 @@ namespace AntiGravity.Editor
 
             stage.AddComponent<FallOutHandler>();
 
+            // Add Ambient Wind/Thunder Sound to Stage
+            var stageAudio = stage.AddComponent<AudioSource>();
+            stageAudio.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(AMBIENT_SFX_PATH);
+            stageAudio.loop = true;
+            stageAudio.spatialBlend = 0.5f; // Semi-spatial
+            stageAudio.volume = 0.3f;
+            stageAudio.Play();
+
             // 5. Setup Sword for Player
             GameObject sword = SetupSword("VR_Sword_Player", new Vector3(0.3f, 1f, 0.3f));
             
@@ -318,6 +362,10 @@ namespace AntiGravity.Editor
                 var boxCol = existingSword.gameObject.GetComponent<BoxCollider>();
                 if (boxCol == null) boxCol = existingSword.gameObject.AddComponent<BoxCollider>();
                 boxCol.isTrigger = true; 
+
+                var sRb = existingSword.gameObject.GetComponent<Rigidbody>();
+                if (sRb == null) sRb = existingSword.gameObject.AddComponent<Rigidbody>();
+                sRb.isKinematic = true; // Follow animation but allow trigger detection
 
                 // Setup Sword references (Audio, etc.)
                 var bladeRenderer = existingSword.GetComponent<Renderer>();
@@ -567,22 +615,23 @@ namespace AntiGravity.Editor
             canvasObj.transform.SetParent(leftHand, false);
             canvasObj.transform.localPosition = new Vector3(0, 0.05f, 0.1f);
             canvasObj.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            canvasObj.transform.localScale = Vector3.one * 0.001f;
+            canvasObj.transform.localScale = Vector3.one * 0.0006f; // Slightly smaller to fit two
 
             Canvas canvas = canvasObj.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             canvasObj.AddComponent<CanvasScaler>();
             canvasObj.AddComponent<GraphicRaycaster>();
 
-            GameObject bgObj = new GameObject("Background");
+            GameObject bgObj = new GameObject("Kiwami_BG");
             bgObj.transform.SetParent(canvasObj.transform, false);
+            bgObj.transform.localPosition = new Vector3(-60, 0, 0);
             var bgImg = bgObj.AddComponent<Image>();
             bgImg.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(UI_CIRCLE_OUTLINE);
             bgImg.color = new Color(1, 1, 1, 0.5f);
             bgObj.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 100);
 
-            GameObject fillObj = new GameObject("Fill");
-            fillObj.transform.SetParent(canvasObj.transform, false);
+            GameObject fillObj = new GameObject("Kiwami_Fill");
+            fillObj.transform.SetParent(bgObj.transform, false);
             var fillImg = fillObj.AddComponent<Image>();
             fillImg.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(UI_CIRCLE_FILL);
             fillImg.type = Image.Type.Filled;
@@ -590,6 +639,26 @@ namespace AntiGravity.Editor
             fillImg.fillOrigin = (int)Image.Origin360.Top;
             fillImg.fillAmount = 0f;
             fillObj.GetComponent<RectTransform>().sizeDelta = new Vector2(90, 90);
+
+            // HP UI
+            GameObject hpBgObj = new GameObject("HP_BG");
+            hpBgObj.transform.SetParent(canvasObj.transform, false);
+            hpBgObj.transform.localPosition = new Vector3(60, 0, 0);
+            var hpBgImg = hpBgObj.AddComponent<Image>();
+            hpBgImg.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(UI_CIRCLE_OUTLINE);
+            hpBgImg.color = new Color(1, 0.2f, 0.2f, 0.5f);
+            hpBgObj.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 100);
+
+            GameObject hpFillObj = new GameObject("HP_Fill");
+            hpFillObj.transform.SetParent(hpBgObj.transform, false);
+            var hpFillImg = hpFillObj.AddComponent<Image>();
+            hpFillImg.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(UI_CIRCLE_FILL);
+            hpFillImg.color = Color.red;
+            hpFillImg.type = Image.Type.Filled;
+            hpFillImg.fillMethod = Image.FillMethod.Radial360;
+            hpFillImg.fillOrigin = (int)Image.Origin360.Top;
+            hpFillImg.fillAmount = 1f;
+            hpFillObj.GetComponent<RectTransform>().sizeDelta = new Vector2(90, 90);
 
             GameObject textObj = new GameObject("StatusText");
             textObj.transform.SetParent(canvasObj.transform, false);
@@ -602,7 +671,10 @@ namespace AntiGravity.Editor
 
             var uiComp = canvasObj.AddComponent<GaugeUI>();
             var fFill = typeof(GaugeUI).GetField("gaugeFill", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fHpFill = typeof(GaugeUI).GetField("hpFill", BindingFlags.NonPublic | BindingFlags.Instance);
+            
             if (fFill != null) fFill.SetValue(uiComp, fillImg);
+            if (fHpFill != null) fHpFill.SetValue(uiComp, hpFillImg);
         }
 
         private static RuntimeAnimatorController SetupAnimatorController()

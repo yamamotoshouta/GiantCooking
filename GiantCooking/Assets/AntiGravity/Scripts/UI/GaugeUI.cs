@@ -6,8 +6,10 @@ namespace AntiGravity
     public class GaugeUI : MonoBehaviour
     {
         [SerializeField] private Image gaugeFill;
+        [SerializeField] private Image hpFill;
         [SerializeField] private Color normalColor = Color.cyan;
-        [SerializeField] private Color maxColor = Color.red;
+        [SerializeField] private Color maxColor = Color.yellow;
+        [SerializeField] private Color hpColor = Color.red;
 
         private void Start()
         {
@@ -15,6 +17,7 @@ namespace AntiGravity
             {
                 GameManager.Instance.OnGaugeChanged.AddListener(UpdateGauge);
                 GameManager.Instance.OnGaugeMaxed.AddListener(HandleMaxGauge);
+                GameManager.Instance.OnPlayerHPChanged.AddListener(UpdateHP);
             }
             
             if (gaugeFill != null)
@@ -41,7 +44,14 @@ namespace AntiGravity
             if (gaugeFill != null)
             {
                 gaugeFill.color = maxColor;
-                // Add some juice like pulsing here
+            }
+        }
+
+        private void UpdateHP(float percent)
+        {
+            if (hpFill != null)
+            {
+                hpFill.fillAmount = percent;
             }
         }
     }

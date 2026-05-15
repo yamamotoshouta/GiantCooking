@@ -9,7 +9,9 @@ namespace AntiGravity.System
         public static ScreenFader Instance { get; private set; }
 
         [SerializeField] private Image fadeImage;
+        [SerializeField] private Image damageImage;
         [SerializeField] private float defaultFadeDuration = 1.0f;
+        [SerializeField] private float flashSpeed = 4f;
 
         private void Awake()
         {
@@ -44,6 +46,48 @@ namespace AntiGravity.System
                 
                 DontDestroyOnLoad(canvasObj);
             }
+
+            if (damageImage == null)
+            {
+                // Create a damage flash image on the same canvas if not assigned
+                GameObject imageObj = new GameObject("DamageFlashImage");
+                imageObj.transform.SetParent(fadeImage.transform.parent);
+                damageImage = imageObj.AddComponent<Image>();
+                damageImage.color = Color.clear;
+                damageImage.rectTransform.anchorMin = Vector2.zero;
+                damageImage.rectTransform.anchorMax = Vector2.one;
+                damageImage.rectTransform.sizeDelta = Vector2.zero;
+                damageImage.raycastTarget = false; // Don't block clicks
+            }
+        }
+
+        private void Start()
+        {
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnPlayerHit.AddListener(TriggerFlash);
+            }
+        }
+
+        public void TriggerFlash()
+        {
+            StopAllCoroutines();
+            StartCoroutine(FlashRoutine());
+        }
+
+        private IEnumerator FlashRoutine()
+        {
+            if (damageImage == null) yield break;
+
+            damageImage.color = new Color(1, 0, 0, 0.4f); // Red with 40% alpha
+            while (damageImage.color.a > 0.01f)
+            {
+                Color c = damageImage.color;
+                c.a = Mathf.MoveTowards(c.a, 0, flashSpeed * Time.deltaTime);
+                damageImage.color = c;
+                yield return null;
+            }
+            damageImage.color = Color.clear;
         }
 
         public Coroutine FadeIn(float duration = -1)

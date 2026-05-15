@@ -12,6 +12,7 @@ namespace AntiGravity
         [SerializeField] private float minHapticIntensity = 0.1f;
         [SerializeField] private float maxHapticIntensity = 0.8f;
         [SerializeField] private float hapticDuration = 0.1f;
+        [SerializeField] private float playerDamage = 1.0f;
 
         [Header("Audio & Visual Settings")]
         [SerializeField] private AudioSource audioSource;
@@ -100,6 +101,10 @@ namespace AntiGravity
             {
                 HandleEnemyHit(hitObj, contactPoint);
             }
+            else if (hitObj.CompareTag("MainCamera") || hitObj.CompareTag("Player"))
+            {
+                HandlePlayerHit(hitObj, contactPoint);
+            }
         }
 
         private void HandleSwordClash(GameObject otherSword, Vector3 contactPoint)
@@ -163,6 +168,23 @@ namespace AntiGravity
 
                     GameManager.Instance.ResetGauge();
                 }
+            }
+        }
+
+        private void HandlePlayerHit(GameObject playerObj, Vector3 contactPoint)
+        {
+            // Only enemy swords can damage the player
+            if (gameObject.name.Contains("Enemy") && GameManager.Instance != null)
+            {
+                GameManager.Instance.TakeDamage(playerDamage);
+                
+                // Audio feedback for being hit
+                if (audioSource != null && clashClip != null)
+                {
+                    audioSource.PlayOneShot(clashClip, 0.5f);
+                }
+
+                Debug.Log("Player was hit by Enemy Sword!");
             }
         }
 

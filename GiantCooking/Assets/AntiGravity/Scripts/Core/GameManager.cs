@@ -7,6 +7,15 @@ namespace AntiGravity
     {
         public static GameManager Instance { get; private set; }
 
+        [Header("Audio Settings")]
+        [SerializeField] private AudioSource audioSource;
+        [SerializeField] private AudioSource bgmSource;
+        [SerializeField] private AudioClip gaugeMaxClip;
+        [SerializeField] private AudioClip issenActivateClip;
+        [SerializeField] private AudioClip playingBGM;
+        [SerializeField] private AudioClip victoryBGM;
+        [SerializeField] private AudioClip defeatBGM;
+
         [Header("Gauge Settings")]
         [SerializeField] private float maxGauge = 1.0f;
         [SerializeField] private float gaugeDecayRate = 0.02f;
@@ -23,11 +32,15 @@ namespace AntiGravity
         public bool IsIssenReady => isIssenReady;
         public bool IsIssenActive => isIssenActive;
 
-        [Header("Audio Settings")]
-        [SerializeField] private AudioSource audioSource;
-        [SerializeField] private AudioClip gaugeMaxClip;
-        [SerializeField] private AudioClip issenActivateClip;
+        [Header("Player Settings")]
+        [SerializeField] private float playerMaxHP = 3f;
+        private float currentPlayerHP;
 
+        public float CurrentPlayerHP => currentPlayerHP;
+        public float PlayerMaxHP => playerMaxHP;
+
+        public UnityEvent<float> OnPlayerHPChanged;
+        public UnityEvent OnPlayerHit;
         public UnityEvent<float> OnGaugeChanged;
         public UnityEvent OnGaugeMaxed;
         public UnityEvent OnIssenActivated;
@@ -56,8 +69,18 @@ namespace AntiGravity
         public void StartGame()
         {
             currentState = GameState.Playing;
+            currentPlayerHP = playerMaxHP;
+            OnPlayerHPChanged?.Invoke(1.0f);
             ResetGauge();
             OnGameStarted?.Invoke();
+            
+            if (bgmSource != null && playingBGM != null)
+            {
+                bgmSource.clip = playingBGM;
+                bgmSource.loop = true;
+                bgmSource.Play();
+            }
+            
             Debug.Log("Game Started!");
         }
 
@@ -67,7 +90,30 @@ namespace AntiGravity
             {
                 currentState = GameState.Victory;
                 OnVictory?.Invoke();
+                
+                if (bgmSource != null)
+                {
+                    bgmSource.Stop();
+                    if (victoryBGM != null) bgmSource.PlayOneShot(victoryBGM);
+                }
+                
                 Debug.Log("Victory!");
+            }
+        }
+
+        public void TakeDamage(float amount)
+        {
+            if (currentState != GameState.Playing) return;
+
+            currentPlayerHP -= amount;
+            OnPlayerHPChanged?.Invoke(currentPlayerHP / playerMaxHP);
+            OnPlayerHit?.Invoke();
+
+            Debug.Log($"Player Hit! HP: {currentPlayerHP}");
+
+            if (currentPlayerHP <= 0)
+            {
+                TriggerDefeat();
             }
         }
 
@@ -77,6 +123,13 @@ namespace AntiGravity
             {
                 currentState = GameState.Defeat;
                 OnDefeat?.Invoke();
+                
+                if (bgmSource != null)
+                {
+                    bgmSource.Stop();
+                    if (defeatBGM != null) bgmSource.PlayOneShot(defeatBGM);
+                }
+                
                 Debug.Log("Defeat...");
             }
         }
