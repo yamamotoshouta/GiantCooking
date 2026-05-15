@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Events;
+using System.Collections;
 
 namespace AntiGravity
 {
@@ -12,6 +13,7 @@ namespace AntiGravity
         [SerializeField] private AudioSource bgmSource;
         [SerializeField] private AudioClip gaugeMaxClip;
         [SerializeField] private AudioClip issenActivateClip;
+        [SerializeField] private AudioClip titleBGM;
         [SerializeField] private AudioClip playingBGM;
         [SerializeField] private AudioClip victoryBGM;
         [SerializeField] private AudioClip defeatBGM;
@@ -23,6 +25,7 @@ namespace AntiGravity
         public enum GameState { StartMenu, Playing, Victory, Defeat }
         private GameState currentState = GameState.StartMenu;
         public GameState CurrentState => currentState;
+        private Coroutine bgmFadeCoroutine;
 
         private float currentGauge = 0f;
         private bool isIssenReady = false;
@@ -64,6 +67,51 @@ namespace AntiGravity
         {
             // Initial state is StartMenu
             currentState = GameState.StartMenu;
+            
+            if (bgmSource != null && titleBGM != null)
+            {
+                PlayBGM(titleBGM, true);
+            }
+        }
+
+        public void PlayBGM(AudioClip clip, bool loop)
+        {
+            if (bgmSource == null || clip == null) return;
+            
+            // If already playing the same clip, don't restart
+            if (bgmSource.isPlaying && bgmSource.clip == clip) return;
+
+            if (bgmFadeCoroutine != null) StopCoroutine(bgmFadeCoroutine);
+            bgmFadeCoroutine = StartCoroutine(FadeBGM(clip, loop));
+        }
+
+        private IEnumerator FadeBGM(AudioClip clip, bool loop)
+        {
+            float duration = 1.0f;
+            float startVolume = bgmSource.volume;
+
+            if (bgmSource.isPlaying)
+            {
+                // Fade out
+                for (float t = 0; t < duration; t += Time.deltaTime)
+                {
+                    bgmSource.volume = Mathf.Lerp(startVolume, 0, t / duration);
+                    yield return null;
+                }
+                bgmSource.Stop();
+            }
+
+            bgmSource.clip = clip;
+            bgmSource.loop = loop;
+            bgmSource.Play();
+
+            // Fade in
+            for (float t = 0; t < duration; t += Time.deltaTime)
+            {
+                bgmSource.volume = Mathf.Lerp(0, startVolume, t / duration);
+                yield return null;
+            }
+            bgmSource.volume = startVolume;
         }
 
         public void StartGame()
@@ -74,14 +122,23 @@ namespace AntiGravity
             ResetGauge();
             OnGameStarted?.Invoke();
             
-            if (bgmSource != null && playingBGM != null)
+            if (playingBGM != null)
             {
-                bgmSource.clip = playingBGM;
-                bgmSource.loop = true;
-                bgmSource.Play();
+                PlayBGM(playingBGM, true);
             }
             
+            ResetAllPositions();
+            
             Debug.Log("Game Started!");
+        }
+
+        private void ResetAllPositions()
+        {
+            var handlers = FindObjectsOfType<FallOutHandler>();
+            foreach (var handler in handlers)
+            {
+                handler.ResetPosition();
+            }
         }
 
         public void TriggerVictory()
@@ -91,11 +148,8 @@ namespace AntiGravity
                 currentState = GameState.Victory;
                 OnVictory?.Invoke();
                 
-                if (bgmSource != null)
-                {
-                    bgmSource.Stop();
-                    if (victoryBGM != null) bgmSource.PlayOneShot(victoryBGM);
-                }
+                if (victoryBGM != null) PlayBGM(victoryBGM, false);
+                else bgmSource.Stop();
                 
                 Debug.Log("Victory!");
             }
@@ -124,11 +178,8 @@ namespace AntiGravity
                 currentState = GameState.Defeat;
                 OnDefeat?.Invoke();
                 
-                if (bgmSource != null)
-                {
-                    bgmSource.Stop();
-                    if (defeatBGM != null) bgmSource.PlayOneShot(defeatBGM);
-                }
+                if (defeatBGM != null) PlayBGM(defeatBGM, false);
+                else bgmSource.Stop();
                 
                 Debug.Log("Defeat...");
             }

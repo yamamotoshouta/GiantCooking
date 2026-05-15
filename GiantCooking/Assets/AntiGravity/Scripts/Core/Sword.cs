@@ -138,7 +138,7 @@ namespace AntiGravity
             // Play Sound & VFX
             if (audioSource != null && clashClip != null)
             {
-                audioSource.PlayOneShot(clashClip);
+                audioSource.PlayOneShot(clashClip, 0.6f);
             }
 
             if (sparkPrefab != null)

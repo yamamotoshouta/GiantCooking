@@ -18,7 +18,8 @@ namespace AntiGravity.Editor
         private const string ISSEN_SFX_PATH = "Assets/Free Pack/Magic Spell_Electricity Spell_1.wav";
         private const string GAUGE_MAX_SFX_PATH = "Assets/Free Pack/Magic Spell_Simple Swoosh_6.wav";
         private const string AMBIENT_SFX_PATH = "Assets/Free Pack/Thunder strikes 30 second- Loop.wav";
-        private const string BGM_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-49.wav";
+        private const string TITLE_BGM_PATH = "Assets/EchoFragments/Main Theme - Echo Break/Echo Break.mp3";
+        private const string BGM_PATH = "Assets/EchoFragments/Tension - Arrival/Arrival.mp3";
         private const string VICTORY_BGM_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-16.wav";
         private const string DEFEAT_BGM_PATH = "Assets/Casual Game Sounds U6/CasualGameSounds/DM-CGS-18.wav";
         private const string FOOTSTEP_SFX_PATH = "Assets/Free Pack/Walking in ChainMail - Loop.wav";
@@ -69,6 +70,7 @@ namespace AntiGravity.Editor
             var allComponents = GameObject.FindObjectsOfType<MonoBehaviour>();
             foreach (var comp in allComponents)
             {
+                if (comp == null) continue;
                 string typeName = comp.GetType().Name;
                 if (typeName == "Volume" || typeName == "FastSky_Sun_Color" || typeName == "FastSky_Ambience")
                 {
@@ -80,7 +82,10 @@ namespace AntiGravity.Editor
             AudioSource[] allAudio = GameObject.FindObjectsOfType<AudioSource>();
             foreach (var audio in allAudio)
             {
-                if (audio.loop || (audio.clip != null && (audio.clip.name.Contains("Thunder") || audio.clip.name.Contains("Electricity"))))
+                if (audio == null) continue;
+                
+                bool shouldDestroy = audio.loop || (audio.clip != null && (audio.clip.name.Contains("Thunder") || audio.clip.name.Contains("Electricity")));
+                if (shouldDestroy)
                 {
                     audio.Stop();
                     if (!EditorApplication.isPlaying) Undo.DestroyObjectImmediate(audio.gameObject);
@@ -104,12 +109,13 @@ namespace AntiGravity.Editor
             bgmSource.playOnAwake = false;
             bgmSource.loop = true;
             bgmSource.spatialBlend = 0f;
-            bgmSource.volume = 0.5f;
+            bgmSource.volume = 0.4f;
 
             var fAudioSource = typeof(GameManager).GetField("audioSource", BindingFlags.NonPublic | BindingFlags.Instance);
             var fBgmSource = typeof(GameManager).GetField("bgmSource", BindingFlags.NonPublic | BindingFlags.Instance);
             var fMaxClip = typeof(GameManager).GetField("gaugeMaxClip", BindingFlags.NonPublic | BindingFlags.Instance);
             var fIssenClip = typeof(GameManager).GetField("issenActivateClip", BindingFlags.NonPublic | BindingFlags.Instance);
+            var fTitleBgm = typeof(GameManager).GetField("titleBGM", BindingFlags.NonPublic | BindingFlags.Instance);
             var fPlayBgm = typeof(GameManager).GetField("playingBGM", BindingFlags.NonPublic | BindingFlags.Instance);
             var fVicBgm = typeof(GameManager).GetField("victoryBGM", BindingFlags.NonPublic | BindingFlags.Instance);
             var fDefBgm = typeof(GameManager).GetField("defeatBGM", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -118,6 +124,7 @@ namespace AntiGravity.Editor
             if (fBgmSource != null) fBgmSource.SetValue(manager, bgmSource);
             if (fMaxClip != null) fMaxClip.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(GAUGE_MAX_SFX_PATH));
             if (fIssenClip != null) fIssenClip.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(ISSEN_SFX_PATH));
+            if (fTitleBgm != null) fTitleBgm.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(TITLE_BGM_PATH));
             if (fPlayBgm != null) fPlayBgm.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(BGM_PATH));
             if (fVicBgm != null) fVicBgm.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(VICTORY_BGM_PATH));
             if (fDefBgm != null) fDefBgm.SetValue(manager, AssetDatabase.LoadAssetAtPath<AudioClip>(DEFEAT_BGM_PATH));
@@ -272,7 +279,7 @@ namespace AntiGravity.Editor
             stageAudio.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(AMBIENT_SFX_PATH);
             stageAudio.loop = true;
             stageAudio.spatialBlend = 0.5f; // Semi-spatial
-            stageAudio.volume = 0.3f;
+            stageAudio.volume = 0.05f; // Much lower to prioritize BGM
             stageAudio.Play();
 
             // 5. Setup Sword for Player

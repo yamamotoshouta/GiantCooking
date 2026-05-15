@@ -57,5 +57,19 @@ namespace AntiGravity
 
             isFading = false;
         }
+
+        public void ResetPosition()
+        {
+            StopAllCoroutines();
+            isFading = false;
+            
+            transform.position = startPosition;
+            Rigidbody rb = GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
+        }
     }
 }
