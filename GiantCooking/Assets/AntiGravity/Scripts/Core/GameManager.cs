@@ -17,6 +17,7 @@ namespace AntiGravity
         [SerializeField] private AudioClip playingBGM;
         [SerializeField] private AudioClip victoryBGM;
         [SerializeField] private AudioClip defeatBGM;
+        [SerializeField] private AudioClip heartbeatClip; // Added for damage feedback
 
         [Header("Gauge Settings")]
         [SerializeField] private float maxGauge = 1.0f;
@@ -162,6 +163,11 @@ namespace AntiGravity
             currentPlayerHP -= amount;
             OnPlayerHPChanged?.Invoke(currentPlayerHP / playerMaxHP);
             OnPlayerHit?.Invoke();
+            
+            if (audioSource != null && heartbeatClip != null)
+            {
+                audioSource.PlayOneShot(heartbeatClip, 1.0f);
+            }
 
             Debug.Log($"Player Hit! HP: {currentPlayerHP}");
 

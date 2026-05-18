@@ -109,6 +109,28 @@ namespace AntiGravity
 
         private void HandleSwordClash(GameObject otherSword, Vector3 contactPoint)
         {
+            EnemyAI enemy = otherSword.GetComponentInParent<EnemyAI>();
+            EnemyAI myEnemy = GetComponentInParent<EnemyAI>();
+
+            // Is the enemy doing an unblockable attack?
+            if (enemy != null && enemy.CurrentAttackType == EnemyAI.AttackType.Unblockable)
+            {
+                // Player's sword hitting an unblockable enemy sword
+                if (rb != null) rb.AddForce((transform.position - contactPoint).normalized * bounceForce * 1.5f, ForceMode.Impulse);
+                TriggerHaptics(1.0f); // Heavy haptic to indicate guard break
+                if (audioSource != null && clashClip != null) audioSource.PlayOneShot(clashClip, 1.0f);
+                if (sparkPrefab != null) Instantiate(sparkPrefab, contactPoint, Quaternion.identity);
+                return; // Do not add gauge, do not hit stop, do not recoil enemy
+            }
+
+            if (myEnemy != null && myEnemy.CurrentAttackType == EnemyAI.AttackType.Unblockable)
+            {
+                // Enemy's unblockable sword hitting player's sword
+                // Enemy sword does NOT bounce, it pushes right through
+                return;
+            }
+
+            // --- Normal Clash ---
             // Calculate bounce direction
             Vector3 bounceDir = (transform.position - contactPoint).normalized;
             if (rb != null) rb.AddForce(bounceDir * bounceForce, ForceMode.Impulse);
@@ -123,7 +145,6 @@ namespace AntiGravity
             }
 
             // Add to Gauge
-            EnemyAI enemy = otherSword.GetComponentInParent<EnemyAI>();
             if (enemy != null)
             {
                 if (enemy.IsInvincible) return;
@@ -132,7 +153,9 @@ namespace AntiGravity
 
             if (GameManager.Instance != null)
             {
-                GameManager.Instance.AddGauge(0.05f);
+                // Heavy attack gives slightly more gauge when parried
+                float gaugeToAdd = (enemy != null && enemy.CurrentAttackType == EnemyAI.AttackType.Heavy) ? 0.08f : 0.05f;
+                GameManager.Instance.AddGauge(gaugeToAdd);
             }
 
             // Play Sound & VFX
@@ -176,15 +199,24 @@ namespace AntiGravity
             // Only enemy swords can damage the player
             if (gameObject.name.Contains("Enemy") && GameManager.Instance != null)
             {
-                GameManager.Instance.TakeDamage(playerDamage);
+                EnemyAI myEnemy = GetComponentInParent<EnemyAI>();
+                float damageToDeal = playerDamage;
+
+                // Unblockable attacks deal double damage!
+                if (myEnemy != null && myEnemy.CurrentAttackType == EnemyAI.AttackType.Unblockable)
+                {
+                    damageToDeal *= 2.0f;
+                }
+
+                GameManager.Instance.TakeDamage(damageToDeal);
                 
                 // Audio feedback for being hit
                 if (audioSource != null && clashClip != null)
                 {
-                    audioSource.PlayOneShot(clashClip, 0.5f);
+                    audioSource.PlayOneShot(clashClip, 0.8f);
                 }
 
-                Debug.Log("Player was hit by Enemy Sword!");
+                Debug.Log($"Player was hit by Enemy Sword! Damage: {damageToDeal}");
             }
         }
 
