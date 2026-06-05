@@ -153,6 +153,11 @@ namespace AntiGravity
 
             if (GameManager.Instance != null)
             {
+                if (myEnemy == null)
+                {
+                    GameManager.Instance.TriggerPlayerInvincibility(1.0f);
+                }
+
                 // Heavy attack gives slightly more gauge when parried
                 float gaugeToAdd = (enemy != null && enemy.CurrentAttackType == EnemyAI.AttackType.Heavy) ? 0.08f : 0.05f;
                 GameManager.Instance.AddGauge(gaugeToAdd);

@@ -10,8 +10,12 @@ namespace AntiGravity.System
 
         [SerializeField] private Image fadeImage;
         [SerializeField] private Image damageImage;
+        [SerializeField] private Image invincibilityImage;
         [SerializeField] private float defaultFadeDuration = 1.0f;
         [SerializeField] private float flashSpeed = 4f;
+        [SerializeField] private float invincibilityFadeSpeed = 3f;
+        [Header("Invincibility Visuals")]
+        [SerializeField] private Color invincibilityAuraColor = new Color(0.2f, 0.6f, 1f, 0.35f);
 
         private void Awake()
         {
@@ -58,6 +62,19 @@ namespace AntiGravity.System
                 damageImage.rectTransform.anchorMax = Vector2.one;
                 damageImage.rectTransform.sizeDelta = Vector2.zero;
                 damageImage.raycastTarget = false; // Don't block clicks
+            }
+
+            if (invincibilityImage == null)
+            {
+                // Create an invincibility aura image on the same canvas if not assigned
+                GameObject invObj = new GameObject("InvincibilityImage");
+                invObj.transform.SetParent(fadeImage.transform.parent);
+                invincibilityImage = invObj.AddComponent<Image>();
+                invincibilityImage.color = Color.clear;
+                invincibilityImage.rectTransform.anchorMin = Vector2.zero;
+                invincibilityImage.rectTransform.anchorMax = Vector2.one;
+                invincibilityImage.rectTransform.sizeDelta = Vector2.zero;
+                invincibilityImage.raycastTarget = false;
             }
         }
 
@@ -117,6 +134,38 @@ namespace AntiGravity.System
 
             color.a = endAlpha;
             fadeImage.color = color;
+        }
+
+        public void SetInvincibilityVisuals(bool active)
+        {
+            if (invincibilityImage == null) return;
+            StopCoroutine("InvincibilityFadeRoutine");
+            StartCoroutine("InvincibilityFadeRoutine", active);
+        }
+
+        private IEnumerator InvincibilityFadeRoutine(bool active)
+        {
+            float targetAlpha = active ? invincibilityAuraColor.a : 0f;
+            Color baseColor = invincibilityAuraColor;
+            baseColor.a = 0f; // Start transparent
+            
+            while (Mathf.Abs(invincibilityImage.color.a - targetAlpha) > 0.01f)
+            {
+                Color c = invincibilityImage.color;
+                if (c.r == 0 && c.g == 0 && c.b == 0 && c.a == 0) c = baseColor;
+                
+                c.r = baseColor.r;
+                c.g = baseColor.g;
+                c.b = baseColor.b;
+                c.a = Mathf.MoveTowards(c.a, targetAlpha, invincibilityFadeSpeed * Time.deltaTime);
+                invincibilityImage.color = c;
+                
+                yield return null;
+            }
+            
+            Color finalColor = invincibilityImage.color;
+            finalColor.a = targetAlpha;
+            invincibilityImage.color = finalColor;
         }
     }
 }

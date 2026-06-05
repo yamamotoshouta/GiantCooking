@@ -42,6 +42,7 @@ namespace AntiGravity
 
         public float CurrentPlayerHP => currentPlayerHP;
         public float PlayerMaxHP => playerMaxHP;
+        public bool IsPlayerInvincible { get; private set; }
 
         public UnityEvent<float> OnPlayerHPChanged;
         public UnityEvent OnPlayerHit;
@@ -158,7 +159,7 @@ namespace AntiGravity
 
         public void TakeDamage(float amount)
         {
-            if (currentState != GameState.Playing) return;
+            if (currentState != GameState.Playing || IsPlayerInvincible) return;
 
             currentPlayerHP -= amount;
             OnPlayerHPChanged?.Invoke(currentPlayerHP / playerMaxHP);
@@ -229,6 +230,29 @@ namespace AntiGravity
             isIssenReady = false;
             isIssenActive = false;
             OnGaugeChanged?.Invoke(0f);
+        }
+
+        public void TriggerPlayerInvincibility(float duration)
+        {
+            if (currentState != GameState.Playing || IsPlayerInvincible) return;
+            StartCoroutine(PlayerInvincibilityRoutine(duration));
+        }
+
+        private IEnumerator PlayerInvincibilityRoutine(float duration)
+        {
+            IsPlayerInvincible = true;
+            if (AntiGravity.System.ScreenFader.Instance != null)
+            {
+                AntiGravity.System.ScreenFader.Instance.SetInvincibilityVisuals(true);
+            }
+
+            yield return new WaitForSeconds(duration);
+
+            IsPlayerInvincible = false;
+            if (AntiGravity.System.ScreenFader.Instance != null)
+            {
+                AntiGravity.System.ScreenFader.Instance.SetInvincibilityVisuals(false);
+            }
         }
         
         public bool TryActivateIssen()
