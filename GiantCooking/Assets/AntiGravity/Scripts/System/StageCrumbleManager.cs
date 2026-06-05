@@ -16,12 +16,24 @@ namespace AntiGravity.System
         
         [Header("Effects")]
         [SerializeField] private float vibrationIntensity = 0.05f;
+        [SerializeField] private AudioSource audioSource;
+        [SerializeField] private AudioClip crumbleWarningClip;
+        [SerializeField] private AudioClip crumbleDropClip;
 
         private Coroutine crumbleRoutine;
         private List<GameObject> remainingChunks = new List<GameObject>();
         private Dictionary<GameObject, Vector3> originalPositions = new Dictionary<GameObject, Vector3>();
         private Dictionary<GameObject, Quaternion> originalRotations = new Dictionary<GameObject, Quaternion>();
         private Dictionary<GameObject, bool> originalKinematicState = new Dictionary<GameObject, bool>();
+
+        private void Awake()
+        {
+            if (audioSource == null)
+            {
+                audioSource = GetComponent<AudioSource>();
+                if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
+            }
+        }
 
         private void Start()
         {
@@ -134,6 +146,11 @@ namespace AntiGravity.System
             Vector3 startPos = chunk.transform.position;
             float elapsed = 0f;
 
+            if (audioSource != null && crumbleWarningClip != null)
+            {
+                audioSource.PlayOneShot(crumbleWarningClip, 0.7f);
+            }
+
             // Warning Vibration
             while (elapsed < warningDuration)
             {
@@ -154,6 +171,11 @@ namespace AntiGravity.System
             }
 
             chunk.transform.position = startPos; // Reset position
+
+            if (audioSource != null && crumbleDropClip != null)
+            {
+                audioSource.PlayOneShot(crumbleDropClip, 1.0f);
+            }
 
             // Drop
             Rigidbody rb = chunk.GetComponent<Rigidbody>();

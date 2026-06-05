@@ -40,6 +40,12 @@ namespace AntiGravity
                 originalColor = swordMaterial.GetColor("_EmissionColor");
             }
 
+            if (audioSource == null)
+            {
+                audioSource = GetComponent<AudioSource>();
+                if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
+            }
+
             if (swordTrail != null) swordTrail.enabled = false;
             if (auraParticles != null) auraParticles.Stop();
         }
