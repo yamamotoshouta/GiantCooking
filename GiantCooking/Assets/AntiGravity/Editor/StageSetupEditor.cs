@@ -295,5 +295,146 @@ namespace AntiGravity.Editor
             Selection.activeGameObject = fader.gameObject;
             Debug.Log("【AntiGravity】オーラの色設定画面を開きました！右側の Inspector ウィンドウを確認してください。");
         }
+
+        [MenuItem("GameObject/AntiGravity/選択した2つのオブジェクト（古い剣と新しいモデル）を入れ替える", false, 20)]
+        public static void SwapSwordModel()
+        {
+            if (Selection.gameObjects.Length != 2)
+            {
+                EditorUtility.DisplayDialog("エラー", "「現在の剣」と「新しい MedievalSword」の2つを Ctrlキー を押しながら両方選択して実行してください。", "OK");
+                return;
+            }
+
+            GameObject oldSword = null;
+            GameObject newModel = null;
+
+            if (Selection.gameObjects[0].GetComponent<AntiGravity.Sword>() != null)
+            {
+                oldSword = Selection.gameObjects[0];
+                newModel = Selection.gameObjects[1];
+            }
+            else if (Selection.gameObjects[1].GetComponent<AntiGravity.Sword>() != null)
+            {
+                oldSword = Selection.gameObjects[1];
+                newModel = Selection.gameObjects[0];
+            }
+
+            if (oldSword == null)
+            {
+                EditorUtility.DisplayDialog("エラー", "選択された中に、現在の剣（Swordスクリプトが付いているもの）が含まれていません。", "OK");
+                return;
+            }
+
+            Undo.RegisterCompleteObjectUndo(oldSword, "Swap Sword Model Old");
+            Undo.RegisterCompleteObjectUndo(newModel, "Swap Sword Model New");
+
+            // 新しいモデルを古い剣の子オブジェクトにする（設定を引き継ぐため）
+            newModel.transform.SetParent(oldSword.transform);
+            newModel.transform.localPosition = Vector3.zero;
+            newModel.transform.localRotation = Quaternion.identity;
+
+            // 古い見た目（親や子にあるすべてのMeshRenderer）を非表示にする
+            MeshRenderer[] allOldRenderers = oldSword.GetComponentsInChildren<MeshRenderer>();
+            foreach (MeshRenderer r in allOldRenderers)
+            {
+                // 新しいモデルの見た目は非表示にしない
+                if (r.transform.IsChildOf(newModel.transform)) continue;
+                
+                Undo.RecordObject(r, "Disable Old Renderer");
+                r.enabled = false;
+            }
+
+            // 新しいモデルの見た目をスクリプトに登録する
+            AntiGravity.Sword swordScript = oldSword.GetComponent<AntiGravity.Sword>();
+            if (swordScript != null)
+            {
+                SerializedObject serializedSword = new SerializedObject(swordScript);
+                SerializedProperty rendererProp = serializedSword.FindProperty("swordRenderer");
+                
+                MeshRenderer newRenderer = newModel.GetComponentInChildren<MeshRenderer>();
+                if (newRenderer != null)
+                {
+                    rendererProp.objectReferenceValue = newRenderer;
+                    serializedSword.ApplyModifiedProperties();
+                }
+            }
+
+            Debug.Log("【AntiGravity】剣の見た目の入れ替えが完了し、古い剣を非表示にしました！");
+        }
+
+        [MenuItem("GameObject/AntiGravity/剣の当たり判定（コライダー）を今の見た目に合わせる", false, 21)]
+        public static void FitColliderToVisuals(MenuCommand menuCommand)
+        {
+            GameObject sword = menuCommand.context as GameObject;
+            if (sword == null)
+            {
+                EditorUtility.DisplayDialog("エラー", "剣の親オブジェクトを選択してください。", "OK");
+                return;
+            }
+
+            // 子オブジェクト（MedievalSwordなど）に間違って付いているコライダーを削除する（物理演算バグ防止）
+            Collider[] childColliders = sword.GetComponentsInChildren<Collider>();
+            foreach (Collider c in childColliders)
+            {
+                if (c.gameObject != sword) 
+                {
+                    Undo.DestroyObjectImmediate(c);
+                }
+            }
+
+            // 親オブジェクトに BoxCollider が無ければ自動追加する
+            BoxCollider box = sword.GetComponent<BoxCollider>();
+            if (box == null)
+            {
+                box = Undo.AddComponent<BoxCollider>(sword);
+            }
+
+            MeshRenderer[] renderers = sword.GetComponentsInChildren<MeshRenderer>();
+            
+            Undo.RecordObject(box, "Fit Box Collider");
+
+            bool hasBounds = false;
+            Bounds bounds = new Bounds();
+
+            foreach (MeshRenderer r in renderers)
+            {
+                if (!r.enabled) continue; // 非表示になった古いモデルは無視する
+                
+                Bounds rBounds = r.bounds;
+                Vector3 min = rBounds.min;
+                Vector3 max = rBounds.max;
+
+                // ワールド空間のバウンディングボックスの8つの頂点を取得し、剣のローカル空間に変換
+                Vector3[] corners = new Vector3[8];
+                corners[0] = sword.transform.InverseTransformPoint(new Vector3(min.x, min.y, min.z));
+                corners[1] = sword.transform.InverseTransformPoint(new Vector3(max.x, min.y, min.z));
+                corners[2] = sword.transform.InverseTransformPoint(new Vector3(min.x, max.y, min.z));
+                corners[3] = sword.transform.InverseTransformPoint(new Vector3(max.x, max.y, min.z));
+                corners[4] = sword.transform.InverseTransformPoint(new Vector3(min.x, min.y, max.z));
+                corners[5] = sword.transform.InverseTransformPoint(new Vector3(max.x, min.y, max.z));
+                corners[6] = sword.transform.InverseTransformPoint(new Vector3(min.x, max.y, max.z));
+                corners[7] = sword.transform.InverseTransformPoint(new Vector3(max.x, max.y, max.z));
+
+                for (int i = 0; i < 8; i++)
+                {
+                    if (!hasBounds)
+                    {
+                        bounds = new Bounds(corners[i], Vector3.zero);
+                        hasBounds = true;
+                    }
+                    else
+                    {
+                        bounds.Encapsulate(corners[i]);
+                    }
+                }
+            }
+
+            if (hasBounds)
+            {
+                box.center = bounds.center;
+                box.size = bounds.size;
+                Debug.Log("【AntiGravity】当たり判定（Box Collider）を新しい MedievalSword の大きさに自動で合わせました！");
+            }
+        }
     }
 }
